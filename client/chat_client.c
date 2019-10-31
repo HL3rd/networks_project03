@@ -25,6 +25,22 @@
 /* Define Structures */
 
 /* Define Utilities */
+void concatenate_string(char *original, char *add)
+{
+   while(*original) {
+       original++;
+   }
+
+
+   while(*add) {
+       *original = *add;
+       add++;
+       original++;
+   }
+
+   *original = '\0';
+}
+
 void rstrip(char a, char *s) {
     if (!s || strlen(s) == 0) {
         return;
@@ -100,47 +116,84 @@ int send_command(int client_fd, char *buffer) {
 	return 0;
 }
 
-// function returns 0 if user exists in file
-int is_existing_user(char* user_name) {
-    FILE *fp = fopen("./users.txt", "r");
+// function returns 0 if use properly logs in or signs up
+int login_sign_up(char* user_name) {
+    FILE *fp = fopen("users.txt", "r");
     if (fp == NULL){
         printf("Error checking users file\n");
         return 1;
     }
 
-    char * line = NULL;
+    char* line = NULL;
     size_t len = 0;
 
     while ((getline(&line, &len, fp)) != -1) {
-        // Returns first token aka name
-
         char* name = strtok(line, " ");
-        if (strcmp(name, user_name) == 0) {
-            // found the user, prompt for password
+        if (streq(name, user_name)) {
+            // found the user, prompt for password to login
             char* password = strtok(NULL, " ");
-
             fclose(fp);
-            password_prompt(password);
-            return 0;
+            // Note: if <name> fails, use <user_name>
+            return password_prompt(password, name);
         }
     }
 
     fclose(fp);
-    return 1;
+    return create_new_user(name);
 }
 
 // loop that asks for existing user password
-int password_prompt(char* password) {
+int password_prompt(char* password, char* name) {
     while(1) {
-        // If match: begin session, return 0
-        // Else: printf("Inavlid password.\nPlease enter again >> ")
+        printf("Welcome back! Enter passsword >> ");
+
+        // accept user input from stdin
+        char buffer[BUFSIZ] = {0};
+        while (fgets(buffer, BUFSIZ, stdin)) {
+            // get the password attempt from the stdin buffer
+    		char* attempt = strtok(buffer, " ");
+
+            while (1) {
+                if (streq(attempt, password)) {
+                    // Successful login
+                    printf("Welcome %s!\n", name);
+                    return 0;
+                } else {
+                    printf("Invalid password.\n");
+                    printf("Please enter again >> ");
+                    continue;
+                }
+            }
+
+        }
     }
 }
 
 // create new user
-int create_new_user() {
-    while(1) {
+int create_new_user(char* name) {
+    char* new_name = concatenate_string(name, " ");
 
+    printf("New user? Create password >> ");
+    // accept user input from stdin
+    char buffer[BUFSIZ] = {0};
+    while (fgets(buffer, BUFSIZ, stdin)) {
+        // get the new password
+		char* new_password = strtok(buffer, " ");
+
+        // set new 'user password' pair in users.txt
+        FILE* user_db = fopen("users.txt", "w");
+
+        char* new_pair = concatenate_string(new_name, new_password)
+
+        int results = fputs(new_pair, user_db);
+        if (results == EOF) {
+            // Failed to write do error code here.
+            fprintf(stderr, "Error creating user: %s\n", name);
+            fclose(user_db);
+            return 1;
+        }
+        fclose(user_db);
+        return 0;
     }
 }
 
@@ -151,7 +204,7 @@ int main(int argc, char *argv[]) {
     // parse arguments
 	if (argc != 3) {
 		fprintf(stderr, "%s:\terror:\tincorrect number of arguments!\n", __FILE__);
-		fprintf(stderr, "usage: %s [host] [port]\n", __FILE__);
+		fprintf(stderr, "Usage: %s [host] [port] [name]\n", __FILE__);
 		return EXIT_FAILURE;
 	}
 
@@ -166,21 +219,19 @@ int main(int argc, char *argv[]) {
     }
 
     // check if the user exists in file
-    if (is_existing_user(user_name) == 0) {
-        if (password_prompt() < 0) return 1;
-    } else {
-        if (create_new_user() < 0) return 1;
+    if (login_sign_up(user_name) != 0) {
+        EXIT_FAILURE;
     }
 
     while (1) {
+        printf("Enter P for private conversation.\n");
+        printf("Enter B for message broadcasting.\n");
+        printf("Enter H for chat history.\n");
+        printf("Enter X for exit.\n");
+        printf(">>");
+
+        // TODO: Place command handling from stdin
 
     }
-    // TODO: Prompt the user for password
-    // If returning user, check file if valid password
-
-    // Else, create new user and begin session
-    // TODO: Save name to file
-
-
 
 }
