@@ -23,36 +23,144 @@
 
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
-#define MAX_BUFFER_SIZE 4096
-#define MAX_CLIENTS 50
-#define MIN(a,b) (((a)<(b)) ? (a) : (b))
 
 /* Define Structures and Variables */
-typedef struct {
-    struct sockaddr_in addr; /* Client remote address */
-    int client_fd;              /* Connection file descriptor */
-    int uid;                 /* Client unique identifier */
-    char name[32];           /* Client name */
-} client_t;
+struct client_t {
+    struct sockaddr *addr;  /* Client remote address */
+    int client_fd;          /* Connection file descriptor */
+    int uid;                /* Client unique identifier */
+    char *name;             /* Client username */
 
-client_t *clients[MAX_CLIENTS];
+    struct client_t *next;  /* Pointer to next client in linked list */
+    struct client_t *prev;  /* Pointer to prev client in linked list */
+};
 
-pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+struct client_list {
+    struct client_t *head;
+    struct client_t *tail;
+    pthread_mutex_t mutex;
+    int size;
+};
 
-static int uid = 10;
-static int client_count = 0;
+/* Define Functions */
+struct client_list *client_list_init() {
+    struct client_list *list = malloc(sizeof(struct client_list));
+    if (!list) {
+        fprintf(stderr, "%s:\terror: failed to initialize the client list: %s", __FILE__, strerror(errno));
+        return NULL;
+    }
 
-/* Define Utilities */
-void rstrip(char a, char *s) {
-    if (!s || strlen(s) == 0) {
+    list->head = NULL;
+    list->tail = NULL;
+    list->size = 0;
+    pthread_mutex_init(&list->mutex, NULL);
+
+    return list;
+}
+
+void client_list_add(struct client_list *list, struct client_t *client) {
+    pthread_mutex_lock(&list->mutex);
+    if (!list->head && !list->tail) {
+        list->head = client;
+        list->tail = client;
+
+    } else {
+        client->prev = list->tail;
+        list->tail->next = client;
+        list->tail = client;
+    }
+
+    client->uid = list->size++;
+    pthread_mutex_unlock(&list->mutex);
+}
+
+void client_list_remove(struct client_list *list, int client_id) {
+    struct client_t *client_to_destroy = NULL;
+    pthread_mutex_lock(&list->mutex);
+
+    // case: client to remove is at the head of the list
+    if (list->head->uid == client_id) {
+        client_to_destroy = list->head;
+        if (!list->head->next) {
+            list->head = NULL:
+            list->tail = NULL;
+        } else {
+            list->head = list->head->next;
+            list->head->prev = NULL;
+        }
+    }
+
+    // case: client to remove is at the tail of the list
+    else if (list->tail->uid == client_id) {
+        client_to_destroy = list->tail;
+        list->tail = list->tail->prev;
+        list->tail->next = NULL;
+        found_it = 1;
+    }
+
+    // case: client to remove is in the middle of the list
+    else {
+        struct client_t *current = list->head->next;
+        while (current) {
+            if (current->uid == client_id) {
+                client_to_destroy = current;
+                current->prev->next = current->next;
+                current->next->prev = current->prev;
+                break;
+            }
+
+            current = current->next;
+        }
+    }
+
+    if (!client_to_destroy) {   // uid was not in the list of clients
         return;
     }
 
-    int i = strlen(s) - 1;
-    while (i >= 0 && *(s + i) == a) {
-        *(s + i) = 0;
-        i--;
+    client_destroy(client_to_destroy);
+    list->size = list->size - 1;
+    pthread_mutex_unlock(&list->mutex);
+}
+
+void client_list_destroy(struct client_list *list) {
+    if (list->size > 0) {
+        pthread_mutex_lock(&list->mutex);
+        struct client_t *current = list->head;
+        struct client_t *next;
+        while (current) {
+            next = current->next;
+            client_destroy(current);
+            current = next;
+        }
+
+        pthread_mutex_unlock(&list->mutex);
     }
+
+    pthread_mutex_destroy(&list->mutex);
+    free(list);
+}
+
+struct client_t *client_init(struct sockaddr addr, int client_fd, char *name) {
+    struct client_t *client = malloc(sizeof(struct client_t));
+    if (!client) {
+        fprintf(stderr, "%s:\terror: failed to initialize the client: %s", __FILE__, strerror(errno));
+        return NULL;
+    }
+
+    client->addr = addr;
+    client->client_fd = client_fd;
+    client->uid = -1;
+    client->name = name;
+    client->next = NULL;
+    client->prev = NULL;
+
+    return client;
+}
+
+void client_destroy(struct client_t *client) {
+    free(client->addr);
+    free(client->name);
+    free(client);
 }
 
 // accept client connection
@@ -104,36 +212,6 @@ void *connection_handler(void *socket_desc) {
     return 0;
 }
 
-// add a client to the queue
-void queue_add(client_t *new_client){
-    pthread_mutex_lock(&clients_mutex);
-    int i;
-    for (i = 0; i < MAX_CLIENTS; ++i) {
-        if (!clients[i]) {
-            clients[i] = new_client;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-// remove client from the queue
-void queue_delete(int uid){
-    pthread_mutex_lock(&clients_mutex);
-    int i;
-    for (i = 0; i < MAX_CLIENTS; ++i) {
-        if (clients[i]) {
-            if (clients[i]->uid == uid) {
-                clients[i] = NULL;
-                break;
-            }
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-/* Define Functions */
-
 // function to send message to all clients except sender
 void broadcast_message(char *s, int uid){
     pthread_mutex_lock(&clients_mutex);
@@ -183,7 +261,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in server, client;
     pthread_t tid;
 
-    //Create socket
+    // Create socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
     if (socket_desc == -1) {
         printf("Could not create socket");
@@ -222,8 +300,8 @@ int main(int argc, char *argv[]) {
         cli->uid = uid++;
         sprintf(cli->name, "%d", cli->uid);
 
-        // add client to the queue and fork thread
-        queue_add(cli);
+        // add client to the list and fork thread
+        list_add(cli);
         if (pthread_create(&tid, NULL, &connection_handler, (void*)cli) < 0) {
             perror("Could not create thread\n");
             return 1;
