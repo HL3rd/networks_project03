@@ -163,19 +163,6 @@ void client_destroy(struct client_t *client) {
     free(client);
 }
 
-// accept client connection
-int accept_client(int server_fd, struct sockaddr_in client) {
-    socklen_t client_len = sizeof(struct sockaddr);
-
-    // accept the incoming connection by creating a new socket for the client
-    int client_fd = accept(server_fd, &client, &client_len);
-    if (client_fd < 0) {
-        fprintf(stderr, "%s:\tError:\tUnable to accept client: %s\n", __FILE__, strerror(errno));
-    }
-
-    return client_fd;
-}
-
 // handle connection for each client
 void *connection_handler(void *socket_desc) {
     //Get the socket descriptor
@@ -255,50 +242,76 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    char* port = argv[1];
+    int port = atoi(argv[1]);
 
-    int socket_desc, client_fd, c;
-    struct sockaddr_in server, client;
+    // Initiilize variables
+    int sock_fd, client_addr_len;
+    struct sockaddr_in server_addr, client_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    memset(&client_addr, 0, sizeof(client_addr));
     pthread_t tid;
 
-    // Create socket
-    socket_desc = socket(AF_INET , SOCK_STREAM , 0);
-    if (socket_desc == -1) {
-        printf("Could not create socket");
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(port);
+
+    // Establish the server's own ip address
+    char host_buffer[256];
+
+    printf("Getting hostname\n");
+    if (gethostname(host_buffer, sizeof(host_buffer)) < 0) {
+        fprintf(stderr, "%s: Failed to get current host name\n", argv[0]);
+        exit(-1);
+    };
+
+    // printf("About to IP\n");
+    // char* IPbuffer = inet_ntoa(*((struct in_addr*) gethostbyname(host_buffer)->h_addr_list[0]));
+    // printf("Next\n");
+    // server_addr.sin_addr.s_addr = inet_addr(IPbuffer);
+
+    printf("About to socket\n");
+    /* Initialize server to accept incoming connections */
+    if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) {
+        fprintf(stderr, "%s: Failed to call socket\n", argv[0]);
+        exit(-1);
     }
-    puts("Socket created");
 
-    //Prepare the sockaddr_in structure
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 8888 );
+    printf("About to bind\n");
+    if (bind(sock_fd, (const struct sockaddr *) &server_addr, sizeof(server_addr)) < 0 ) {
+        fprintf(stderr, "%s: Failed to bind socket: %s\n", argv[0], strerror(errno));
+        exit(-1);
 
-    //Bind
-    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0) {
-        //print the error message
-        perror("Bind failed\n");
-        return 1;
     }
 
-    //Listen
-    listen(socket_desc , 3);
+    printf("About to listen\n");
+    if((listen(sock_fd, SOMAXCONN)) < 0) {
+        fprintf(stderr, "%s: Failed to listen: %s\n", argv[0], strerror(errno));
+        exit(-1);
+    }
 
+    printf("Waiting for connection...\n");
+
+    client_addr_len = sizeof(client_addr);
+
+    // accept client connections with multithreading
     // process incoming connections
-    while (1) {
-        printf("Waiting for connection...\n");
+    int client_fd;
+    while ((client_fd = accept(sock_fd, (struct sockaddr *) &client_addr, &client_addr_len))) {
 
-        // accept client connections with multithreading
-        client_fd = accept_client(client_fd, client);
+        if (client_fd < 0) {
+            fprintf(stderr, "%s: Failed to accept: %s\n", argv[0], strerror(errno));
+            return EXIT_FAILURE;
+        }
 
-        // print that connection is established
         printf("Connection accepted\n");
 
         // set a client
         client_t *cli = (client_t *)malloc(sizeof(client_t));
-        cli->addr = client;
+        cli->addr = client_addr;
         cli->client_fd = client_fd;
         cli->uid = uid++;
         sprintf(cli->name, "%d", cli->uid);
+
 
         // add client to the list and fork thread
         list_add(cli);

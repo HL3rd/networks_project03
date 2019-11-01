@@ -226,17 +226,17 @@ int main(int argc, char *argv[]) {
     // check if the user exists in file
     if (login_sign_up(user_name) != 0) {
         EXIT_FAILURE;
+    } else {
+        while (1) {
+            printf("Enter P for private conversation.\n");
+            printf("Enter B for message broadcasting.\n");
+            printf("Enter H for chat history.\n");
+            printf("Enter X for exit.\n");
+            printf(">>");
+
+            // TODO: Place command handling from stdin
+        }
     }
 
-    while (1) {
-        printf("Enter P for private conversation.\n");
-        printf("Enter B for message broadcasting.\n");
-        printf("Enter H for chat history.\n");
-        printf("Enter X for exit.\n");
-        printf(">>");
-
-        // TODO: Place command handling from stdin
-
-    }
 
 }
