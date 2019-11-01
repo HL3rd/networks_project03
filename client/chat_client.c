@@ -134,12 +134,14 @@ int login_sign_up(char* user_name) {
             char* password = strtok(NULL, " ");
             fclose(fp);
             // Note: if <name> fails, use <user_name>
-            return password_prompt(password, name);
+            int pass = password_prompt(password, name);
+            return pass;
         }
     }
 
     fclose(fp);
-    return create_new_user(name);
+    int user = create_new_user(user_name);
+    return user;
 }
 
 // loop that asks for existing user password
@@ -171,7 +173,8 @@ int password_prompt(char* password, char* name) {
 
 // create new user
 int create_new_user(char* name) {
-    char* new_name = concatenate_string(name, " ");
+    char* new_pair = name;
+    concatenate_string(new_pair, " ");
 
     printf("New user? Create password >> ");
     // accept user input from stdin
@@ -183,7 +186,7 @@ int create_new_user(char* name) {
         // set new 'user password' pair in users.txt
         FILE* user_db = fopen("users.txt", "w");
 
-        char* new_pair = concatenate_string(new_name, new_password)
+        concatenate_string(new_pair, new_password);
 
         int results = fputs(new_pair, user_db);
         if (results == EOF) {
@@ -195,6 +198,8 @@ int create_new_user(char* name) {
         fclose(user_db);
         return 0;
     }
+
+    return 1;
 }
 
 /* Define Functions */
@@ -202,7 +207,7 @@ int create_new_user(char* name) {
 /* Main Execution */
 int main(int argc, char *argv[]) {
     // parse arguments
-	if (argc != 3) {
+	if (argc != 4) {
 		fprintf(stderr, "%s:\terror:\tincorrect number of arguments!\n", __FILE__);
 		fprintf(stderr, "Usage: %s [host] [port] [name]\n", __FILE__);
 		return EXIT_FAILURE;

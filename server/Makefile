@@ -5,13 +5,13 @@
 # 	Horacio Lopez (hlopez1)
 
 CC		= gcc
-CFLAGS	= -Wall
+CFLAGS	= -Wall -pthread
 
-TARGETS	= mychat
+TARGETS	= myserver
 
 all: $(TARGETS)
 
-myftpd: chat_server.c
+myserver: chat_server.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
