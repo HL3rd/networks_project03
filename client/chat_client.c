@@ -174,64 +174,65 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    // check if the user exists in file
-    if (login_sign_up(user_name) != 0) {
+    // client sends a username to the server
+    if (login_or_signup(client_fd, user_name) != 0) {
         EXIT_FAILURE;
-    } else {
-        pthread_t send_msg_thread;
-        if (pthread_create(&send_msg_thread, NULL, (void *) send_message_handler, NULL) != 0) {
-            printf ("Create pthread error!\n");
-            exit(EXIT_FAILURE);
-        }
+    }
 
-        pthread_t recv_msg_thread;
-        if (pthread_create(&recv_msg_thread, NULL, (void *) recv_message_handler, NULL) != 0) {
-            printf ("Create pthread error!\n");
-            exit(EXIT_FAILURE);
-        }
+    pthread_t send_msg_thread;
+    if (pthread_create(&send_msg_thread, NULL, (void *) send_message_handler, NULL) != 0) {
+        printf ("Create pthread error!\n");
+        exit(EXIT_FAILURE);
+    }
 
-        char* user_input;
+    pthread_t recv_msg_thread;
+    if (pthread_create(&recv_msg_thread, NULL, (void *) recv_message_handler, NULL) != 0) {
+        printf ("Create pthread error!\n");
+        exit(EXIT_FAILURE);
+    }
 
-        while (1) {
-            // Recieve first client input
-            printf("Enter P for private conversation.\n");
-            printf("Enter B for message broadcasting.\n");
-            printf("Enter H for chat history.\n");
-            printf("Enter X for exit.\n");
-            printf(">>");
+    char* user_input;
 
-            fgets(user_input, 50, stdin);
+    while (1) {
+        // Recieve first client input
+        printf("Enter P for private conversation.\n");
+        printf("Enter B for message broadcasting.\n");
+        printf("Enter H for chat history.\n");
+        printf("Enter X for exit.\n");
+        printf(">>");
 
-            // Remove endline char
-            user_input[strlen(user_input)-1] = '\0';
+        fgets(user_input, 50, stdin);
 
-            // Get chosen operation from user input
-            char* operation = strtok(user_input, " \t\n");
+        // Remove endline char
+        user_input[strlen(user_input)-1] = '\0';
 
-            if (streq(operation, "P")) {
-                if (private_message_handler() == 0) {
-                    continue;
-                } else {
-                    // ERROR
-                }
-            } else if (streq(operation, "B")) {
-                if (broadcast_message_handler() == 0) {
-                    continue;
-                } else {
-                    // ERROR
-                }
-            } else if (streq(operation, "H")) {
-                if (history_handler() == 0) {
-                    continue;
-                } else {
-                    //ERROR
-                }
-            } else if (streq(operation, "X")) {
-                exit_handler();
-            } else {
-                printf("Error. Please enter a proper operation.\n");
+        // Get chosen operation from user input
+        char* operation = strtok(user_input, " \t\n");
+
+        if (streq(operation, "P")) {
+            if (private_message_handler() == 0) {
                 continue;
+            } else {
+                // ERROR
             }
+        } else if (streq(operation, "B")) {
+            if (broadcast_message_handler() == 0) {
+                continue;
+            } else {
+                // ERROR
+            }
+        } else if (streq(operation, "H")) {
+            if (history_handler() == 0) {
+                continue;
+            } else {
+                //ERROR
+            }
+        } else if (streq(operation, "X")) {
+            exit_handler();
+        } else {
+            printf("Error. Please enter a proper operation.\n");
+            continue;
         }
     }
+
 }

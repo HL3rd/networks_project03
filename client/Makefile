@@ -12,7 +12,7 @@ TARGETS	= chatclient
 
 all: $(TARGETS)
 
-chatclient: chat_client.c user.c command_handler.c
+chatclient: chat_client.c auth.c command_handler.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
