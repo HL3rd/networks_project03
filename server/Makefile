@@ -7,11 +7,11 @@
 CC		= gcc
 CFLAGS	= -Wall -pthread
 
-TARGETS	= myserver
+TARGETS	= chatserver
 
 all: $(TARGETS)
 
-myserver: chat_server.c
+chatserver: chat_server.c user.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

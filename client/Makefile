@@ -6,13 +6,13 @@
 # 	Horacio Lopez (hlopez1)
 
 CC		= gcc
-CFLAGS	= -Wall
+CFLAGS	= -Wall -pthread
 
-TARGETS	= myclient
+TARGETS	= chatclient
 
 all: $(TARGETS)
 
-myclient: chat_client.c
+chatclient: chat_client.c user.c command_handler.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

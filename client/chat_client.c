@@ -18,6 +18,10 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <time.h>
+#include <pthread.h>
+
+#include "user.h"
+#include "command_handler.h";
 
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
@@ -30,7 +34,6 @@ void concatenate_string(char *original, char *add)
    while(*original) {
        original++;
    }
-
 
    while(*add) {
        *original = *add;
@@ -116,93 +119,41 @@ int send_command(int client_fd, char *buffer) {
 	return 0;
 }
 
-// function returns 0 if use properly logs in or signs up
-int login_sign_up(char* user_name) {
-    FILE *fp = fopen("users.txt", "r");
-    if (fp == NULL){
-        printf("Error checking users file\n");
-        return 1;
-    }
-
-    char* line = NULL;
-    size_t len = 0;
-
-    while ((getline(&line, &len, fp)) != -1) {
-        char* name = strtok(line, " ");
-        if (streq(name, user_name)) {
-            // found the user, prompt for password to login
-            char* password = strtok(NULL, " ");
-            fclose(fp);
-            // Note: if <name> fails, use <user_name>
-            int pass = password_prompt(password, name);
-            return pass;
-        }
-    }
-
-    fclose(fp);
-    int user = create_new_user(user_name);
-    return user;
-}
-
-// loop that asks for existing user password
-int password_prompt(char* password, char* name) {
-    while(1) {
-        printf("Welcome back! Enter passsword >> ");
-
-        // accept user input from stdin
-        char buffer[BUFSIZ] = {0};
-        while (fgets(buffer, BUFSIZ, stdin)) {
-            // get the password attempt from the stdin buffer
-    		char* attempt = strtok(buffer, " ");
-
-            while (1) {
-                if (streq(attempt, password)) {
-                    // Successful login
-                    printf("Welcome %s!\n", name);
-                    return 0;
-                } else {
-                    printf("Invalid password.\n");
-                    printf("Please enter again >> ");
-                    continue;
-                }
-            }
-
-        }
-    }
-}
-
-// create new user
-int create_new_user(char* name) {
-    char* new_pair = name;
-    concatenate_string(new_pair, " ");
-
-    printf("New user? Create password >> ");
-    // accept user input from stdin
-    char buffer[BUFSIZ] = {0};
-    while (fgets(buffer, BUFSIZ, stdin)) {
-        // get the new password
-		char* new_password = strtok(buffer, " ");
-
-        // set new 'user password' pair in users.txt
-        FILE* user_db = fopen("users.txt", "w");
-
-        concatenate_string(new_pair, new_password);
-
-        int results = fputs(new_pair, user_db);
-        if (results == EOF) {
-            // Failed to write do error code here.
-            fprintf(stderr, "Error creating user: %s\n", name);
-            fclose(user_db);
-            return 1;
-        }
-        fclose(user_db);
-        return 0;
-    }
-
-    return 1;
-}
-
 /* Define Functions */
+void recv_message_handler() {
+    char receiveMessage[LENGTH_SEND] = {};
+    while (1) {
+        int receive = recv(sockfd, receiveMessage, LENGTH_SEND, 0);
+        if (receive > 0) {
+            printf("\r%s\n", receiveMessage);
+            str_overwrite_stdout();
+        } else if (receive == 0) {
+            break;
+        } else {
+            // -1
+        }
+    }
+}
+
+void send_message_handler() {
+    char message[LENGTH_MSG] = {};
+    while (1) {
+        str_overwrite_stdout();
+        while (fgets(message, LENGTH_MSG, stdin) != NULL) {
+            str_trim_lf(message, LENGTH_MSG);
+            if (strlen(message) == 0) {
+                str_overwrite_stdout();
+            } else {
+                break;
+            }
+        }
+        send(sockfd, message, LENGTH_MSG, 0);
+        if (strcmp(message, "exit") == 0) {
+            break;
+        }
+    }
+    catch_ctrl_c_and_exit(2);
+}
 
 /* Main Execution */
 int main(int argc, char *argv[]) {
@@ -227,16 +178,60 @@ int main(int argc, char *argv[]) {
     if (login_sign_up(user_name) != 0) {
         EXIT_FAILURE;
     } else {
+        pthread_t send_msg_thread;
+        if (pthread_create(&send_msg_thread, NULL, (void *) send_message_handler, NULL) != 0) {
+            printf ("Create pthread error!\n");
+            exit(EXIT_FAILURE);
+        }
+
+        pthread_t recv_msg_thread;
+        if (pthread_create(&recv_msg_thread, NULL, (void *) recv_message_handler, NULL) != 0) {
+            printf ("Create pthread error!\n");
+            exit(EXIT_FAILURE);
+        }
+
+        char* user_input;
+
         while (1) {
+            // Recieve first client input
             printf("Enter P for private conversation.\n");
             printf("Enter B for message broadcasting.\n");
             printf("Enter H for chat history.\n");
             printf("Enter X for exit.\n");
             printf(">>");
 
-            // TODO: Place command handling from stdin
+            fgets(user_input, 50, stdin);
+
+            // Remove endline char
+            user_input[strlen(user_input)-1] = '\0';
+
+            // Get chosen operation from user input
+            char* operation = strtok(user_input, " \t\n");
+
+            if (streq(operation, "P")) {
+                if (private_message_handler() == 0) {
+                    continue;
+                } else {
+                    // ERROR
+                }
+            } else if (streq(operation, "B")) {
+                if (broadcast_message_handler() == 0) {
+                    continue;
+                } else {
+                    // ERROR
+                }
+            } else if (streq(operation, "H")) {
+                if (history_handler() == 0) {
+                    continue;
+                } else {
+                    //ERROR
+                }
+            } else if (streq(operation, "X")) {
+                exit_handler();
+            } else {
+                printf("Error. Please enter a proper operation.\n");
+                continue;
+            }
         }
     }
-
-
 }
