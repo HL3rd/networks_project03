@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <pthread.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/types.h>
@@ -21,146 +20,81 @@
 #include <fcntl.h>
 #include <pthread.h>
 
+#include "client.h"
+#include "client_list.h"
+#include "auth.h"
+
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
 
-/* Define Structures and Variables */
-struct client_t {
-    struct sockaddr *addr;  /* Client remote address */
-    int client_fd;          /* Connection file descriptor */
-    int uid;                /* Client unique identifier */
-    char *name;             /* Client username */
-
-    struct client_t *next;  /* Pointer to next client in linked list */
-    struct client_t *prev;  /* Pointer to prev client in linked list */
-};
-
-struct client_list {
-    struct client_t *head;
-    struct client_t *tail;
-    pthread_mutex_t mutex;
-    int size;
-};
+/* Define Structures */
 
 /* Define Functions */
-struct client_list *client_list_init() {
-    struct client_list *list = malloc(sizeof(struct client_list));
-    if (!list) {
-        fprintf(stderr, "%s:\terror: failed to initialize the client list: %s", __FILE__, strerror(errno));
-        return NULL;
+int open_socket(const char *port) {
+    // get linked list of DNS results for corresponding host and port
+    struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+    hints.ai_family     = AF_INET;      // return IPv4 choices
+    hints.ai_socktype   = SOCK_STREAM;  // use TCP (SOCK_DGRAM for UDP)
+    hints.ai_flags      = AI_PASSIVE;   // use all interfaces
+
+    struct addrinfo *results;
+    int status;
+    if ((status = getaddrinfo(NULL, port, &hints, &results)) != 0) {    // NULL indicates localhost
+        fprintf(stderr, "%s:\terror:\tgetaddrinfo failed: %s\n", __FILE__, gai_strerror(status));
+        return -1;
     }
 
-    list->head = NULL;
-    list->tail = NULL;
-    list->size = 0;
-    pthread_mutex_init(&list->mutex, NULL);
+    // iterate through results and attempt to allocate a socket, bind, and listen
+    int server_fd = -1;
+    struct addrinfo *p;
+    for (p = results; p != NULL && server_fd < 0; p = p->ai_next) {
+        // allocate the socket
+        if ((server_fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) < 0) {
+            fprintf(stderr, "%s:\terror:\tfailed to make socket: %s\n", __FILE__, strerror(errno));
+            continue;
+           }
 
-    return list;
-}
+        // bind the socket to the port
+        if (bind(server_fd, p->ai_addr, p->ai_addrlen) < 0) {
+            fprintf(stderr, "%s:\terror:\tfailed to bind: %s\n", __FILE__, strerror(errno));
+            close(server_fd);
+            server_fd = -1;
+            continue;
+        }
 
-void client_list_add(struct client_list *list, struct client_t *client) {
-    pthread_mutex_lock(&list->mutex);
-    if (!list->head && !list->tail) {
-        list->head = client;
-        list->tail = client;
-
-    } else {
-        client->prev = list->tail;
-        list->tail->next = client;
-        list->tail = client;
-    }
-
-    client->uid = list->size++;
-    pthread_mutex_unlock(&list->mutex);
-}
-
-void client_list_remove(struct client_list *list, int client_id) {
-    struct client_t *client_to_destroy = NULL;
-    pthread_mutex_lock(&list->mutex);
-
-    // case: client to remove is at the head of the list
-    if (list->head->uid == client_id) {
-        client_to_destroy = list->head;
-        if (!list->head->next) {
-            list->head = NULL:
-            list->tail = NULL;
-        } else {
-            list->head = list->head->next;
-            list->head->prev = NULL;
+        // listen to the socket
+        if (listen(server_fd, SOMAXCONN) < 0) {
+            fprintf(stderr, "%s:\terror:\tfailed to listen: %s\n", __FILE__, strerror(errno));
+            close(server_fd);
+            server_fd = -1;
+            continue;
         }
     }
 
-    // case: client to remove is at the tail of the list
-    else if (list->tail->uid == client_id) {
-        client_to_destroy = list->tail;
-        list->tail = list->tail->prev;
-        list->tail->next = NULL;
-        found_it = 1;
-    }
+    // free the linked list of address results
+    freeaddrinfo(results);
 
-    // case: client to remove is in the middle of the list
-    else {
-        struct client_t *current = list->head->next;
-        while (current) {
-            if (current->uid == client_id) {
-                client_to_destroy = current;
-                current->prev->next = current->next;
-                current->next->prev = current->prev;
-                break;
-            }
-
-            current = current->next;
-        }
-    }
-
-    if (!client_to_destroy) {   // uid was not in the list of clients
-        return;
-    }
-
-    client_destroy(client_to_destroy);
-    list->size = list->size - 1;
-    pthread_mutex_unlock(&list->mutex);
+    return server_fd;
 }
 
-void client_list_destroy(struct client_list *list) {
-    if (list->size > 0) {
-        pthread_mutex_lock(&list->mutex);
-        struct client_t *current = list->head;
-        struct client_t *next;
-        while (current) {
-            next = current->next;
-            client_destroy(current);
-            current = next;
-        }
+FILE *accept_client(int server_fd) {
+    struct sockaddr client_addr;
+    socklen_t client_len = sizeof(struct sockaddr);
 
-        pthread_mutex_unlock(&list->mutex);
+    // accept the incoming connection by creating a new socket for the client
+    int client_fd = accept(server_fd, &client_addr, &client_len);
+    if (client_fd < 0) {
+        fprintf(stderr, "%s:\terror:\tfailed to accept client: %s\n", __FILE__, strerror(errno));
     }
 
-    pthread_mutex_destroy(&list->mutex);
-    free(list);
-}
-
-struct client_t *client_init(struct sockaddr addr, int client_fd, char *name) {
-    struct client_t *client = malloc(sizeof(struct client_t));
-    if (!client) {
-        fprintf(stderr, "%s:\terror: failed to initialize the client: %s", __FILE__, strerror(errno));
-        return NULL;
+    FILE *client_file = fdopen(client_fd, "w+");
+    if (!client_file) {
+        fprintf(stderr, "%s:\terror:\tfailed to fdopen: %s\n", __FILE__, strerror(errno));
+        close(client_fd);
     }
 
-    client->addr = addr;
-    client->client_fd = client_fd;
-    client->uid = -1;
-    client->name = name;
-    client->next = NULL;
-    client->prev = NULL;
-
-    return client;
-}
-
-void client_destroy(struct client_t *client) {
-    free(client->addr);
-    free(client->name);
-    free(client);
+    return client_file;
 }
 
 // handle connection for each client
@@ -200,37 +134,55 @@ void *connection_handler(void *socket_desc) {
 }
 
 // function to send message to all clients except sender
-void broadcast_message(char *s, int uid){
-    pthread_mutex_lock(&clients_mutex);
-    int i;
-    for (i = 0; i < MAX_CLIENTS; ++i) {
-        if (clients[i]) {
-            if (clients[i]->uid != uid) {
-                if (write(clients[i]->client_fd, s, strlen(s)) < 0) {
-                    perror("Write to descriptor failed");
-                    break;
-                }
-            }
-        }
-    }
-    pthread_mutex_unlock(&clients_mutex);
-}
+// void broadcast_message(char *s, int uid){
+//     pthread_mutex_lock(&clients_mutex);
+//     int i;
+//     for (i = 0; i < MAX_CLIENTS; ++i) {
+//         if (clients[i]) {
+//             if (clients[i]->uid != uid) {
+//                 if (write(clients[i]->client_fd, s, strlen(s)) < 0) {
+//                     perror("Write to descriptor failed");
+//                     break;
+//                 }
+//             }
+//         }
+//     }
+//     pthread_mutex_unlock(&clients_mutex);
+// }
+//
+// // Send message to specific client
+// void send_private_message(char *s, int uid){
+//     pthread_mutex_lock(&clients_mutex);
+//     int i;
+//     for (i = 0; i < MAX_CLIENTS; ++i){
+//         if (clients[i]) {
+//             if (clients[i]->uid == uid) {
+//                 if (write(clients[i]->client_fd, s, strlen(s))<0) {
+//                     perror("Write to descriptor failed");
+//                     break;
+//                 }
+//             }
+//         }
+//     }
+//     pthread_mutex_unlock(&clients_mutex);
+// }
 
-// Send message to specific client
-void send_private_message(char *s, int uid){
-    pthread_mutex_lock(&clients_mutex);
-    int i;
-    for (i = 0; i < MAX_CLIENTS; ++i){
-        if (clients[i]) {
-            if (clients[i]->uid == uid) {
-                if (write(clients[i]->client_fd, s, strlen(s))<0) {
-                    perror("Write to descriptor failed");
-                    break;
-                }
+void * client_handler(void *arg) {
+    struct client_t *client = (struct client_t *) arg;
+    while (1) {
+        char buffer[BUFSIZ];
+        while (fgets(buffer, BUFSIZ, client->client_file)) {
+            // determine if the message is a data message or a command message
+            if (buffer[0] != 0 && buffer[0] == 'D') {            // data message
+
+            } else if (buffer[0] != 0 && buffer[0] == 'C') {     // command message
+
             }
+
+            fputs(buffer, stdout);
+            fputs(buffer, client->client_file);
         }
     }
-    pthread_mutex_unlock(&clients_mutex);
 }
 
 /* Main Execution */
@@ -242,85 +194,81 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    int port = atoi(argv[1]);
+    char *port = argv[1];
+    struct client_list *active_clients = client_list_init();
 
-    // Initiilize variables
-    int sock_fd, client_addr_len;
-    struct sockaddr_in server_addr, client_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    memset(&client_addr, 0, sizeof(client_addr));
-    pthread_t tid;
-
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_addr.sin_port = htons(port);
-
-    // Establish the server's own ip address
-    char host_buffer[256];
-
-    printf("Getting hostname\n");
-    if (gethostname(host_buffer, sizeof(host_buffer)) < 0) {
-        fprintf(stderr, "%s: Failed to get current host name\n", argv[0]);
-        exit(-1);
-    };
-
-    // printf("About to IP\n");
-    // char* IPbuffer = inet_ntoa(*((struct in_addr*) gethostbyname(host_buffer)->h_addr_list[0]));
-    // printf("Next\n");
-    // server_addr.sin_addr.s_addr = inet_addr(IPbuffer);
-
-    printf("About to socket\n");
-    /* Initialize server to accept incoming connections */
-    if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) {
-        fprintf(stderr, "%s: Failed to call socket\n", argv[0]);
-        exit(-1);
-    }
-
-    printf("About to bind\n");
-    if (bind(sock_fd, (const struct sockaddr *) &server_addr, sizeof(server_addr)) < 0 ) {
-        fprintf(stderr, "%s: Failed to bind socket: %s\n", argv[0], strerror(errno));
-        exit(-1);
-
-    }
-
-    printf("About to listen\n");
-    if((listen(sock_fd, SOMAXCONN)) < 0) {
-        fprintf(stderr, "%s: Failed to listen: %s\n", argv[0], strerror(errno));
-        exit(-1);
+    // open socket, bind socket to the port, and listen on socket
+    int server_fd = open_socket(port);
+    if (server_fd < 0) {
+        return EXIT_FAILURE;
     }
 
     printf("Waiting for connection...\n");
-
-    client_addr_len = sizeof(client_addr);
-
-    // accept client connections with multithreading
-    // process incoming connections
-    int client_fd;
-    while ((client_fd = accept(sock_fd, (struct sockaddr *) &client_addr, &client_addr_len))) {
-
-        if (client_fd < 0) {
-            fprintf(stderr, "%s: Failed to accept: %s\n", argv[0], strerror(errno));
-            return EXIT_FAILURE;
+    while (1) {
+        // accept a client connection
+        FILE *client_file = accept_client(server_fd);
+        if (!client_file) {
+            continue;
         }
 
-        printf("Connection accepted\n");
+        // receive username and password from the client
+        char username[BUFSIZ] = {0};
+        fgets(username, BUFSIZ, client_file);
 
-        // set a client
-        client_t *cli = (client_t *)malloc(sizeof(client_t));
-        cli->addr = client_addr;
-        cli->client_fd = client_fd;
-        cli->uid = uid++;
-        sprintf(cli->name, "%d", cli->uid);
+        char *password = user_is_registered(username);
+        if (!password) {    // user is not registered
+            fputs("no user", client_file);
 
+            // if the client is a new user, save the password
+            char new_password[BUFSIZ] = {0};
+            fgets(new_password, BUFSIZ, client_file);
+            int register_status = user_register(username, new_password);
+            if (register_status != 0) {
+                fprintf(stderr, "%s:\terror:\tfailed to register user: %s", __FILE__, strerror(errno));
+                fclose(client_file);
+                continue;
+            }
+        } else {
+            fputs("user is registered", client_file);
 
-        // add client to the list and fork thread
-        list_add(cli);
-        if (pthread_create(&tid, NULL, &connection_handler, (void*)cli) < 0) {
-            perror("Could not create thread\n");
-            return 1;
+            // if the client is an existing user, check the password credentials
+            char password_attempt[BUFSIZ] = {0};
+            while (fgets(password_attempt, BUFSIZ, client_file)) {
+                if (streq(password_attempt, "control-c")) {
+                    break;
+                }
+
+                int login_status = user_login(username, password_attempt);
+                if (login_status == 0) {                // login success
+                    fputs("pass", client_file);
+                    break;
+                } else {
+                    if (login_status == -1) {           // username found but incorrect password
+                        fputs("incorrect password", client_file);
+                    } else if (login_status == -2) {    // username not found
+                        fputs("username not found", client_file);
+                    } else {                            // error opening the users registry file
+                        fputs("server error", client_file);
+                    }
+                }
+            }
+
+            if (streq(password_attempt, "control-c")) {
+                fclose(client_file);
+                continue;
+            }
         }
 
-        // in order to reduce CPU usage
-        sleep(1);
+        // create a struct client_t and add it to the client list
+        struct client_t *new_client = client_init(client_file, username);
+        if (!new_client) {
+            fclose(client_file);
+            continue;
+        }
+
+        client_list_add(active_clients, new_client);
+
+        // check to see if it is a new or existing user
+        pthread_create(&new_client->thread, NULL, client_handler, new_client);
     }
 }
