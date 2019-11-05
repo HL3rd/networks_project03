@@ -88,62 +88,6 @@ int open_socket(const char *port) {
     return server_fd;
 }
 
-FILE *accept_client(int server_fd) {
-    struct sockaddr client_addr;
-    socklen_t client_len = sizeof(struct sockaddr);
-
-    printf("Accepting 1\n");
-    // accept the incoming connection by creating a new socket for the client
-    int client_fd = accept(server_fd, &client_addr, &client_len);
-    if (client_fd < 0) {
-        fprintf(stderr, "%s:\terror:\tfailed to accept client: %s\n", __FILE__, strerror(errno));
-    }
-    printf("Accepting 2\n");
-    FILE *client_file = fdopen(client_fd, "w+");
-    if (!client_file) {
-        fprintf(stderr, "%s:\terror:\tfailed to fdopen: %s\n", __FILE__, strerror(errno));
-        close(client_fd);
-    }
-    printf("Accepting 3\n");
-    return client_file;
-}
-
-// handle connection for each client
-void *connection_handler(void *socket_desc) {
-    //Get the socket descriptor
-    int sock = *(int*)socket_desc;
-    int read_size;
-    char *message , client_message[2000];
-
-    //Send some messages to the client
-    message = "Greetings! I am your connection handler in server\n";
-    write(sock, message, strlen(message));
-
-    message = "Now type something and i shall repeat what you type \n";
-    write(sock, message, strlen(message));
-
-    //Receive a message from client
-    while((read_size = recv(sock, client_message, 2000, 0)) > 0 ) {
-        //end of string marker
-		client_message[read_size] = '\0';
-
-		//Send the message back to client
-        write(sock, client_message, strlen(client_message));
-
-		//clear the message buffer
-		memset(client_message, 0, 2000);
-    }
-
-    if(read_size == 0) {
-        puts("Client disconnected");
-        fflush(stdout);
-    } else if(read_size == -1) {
-        perror("recv failed");
-    }
-
-    return 0;
-}
-
 // Send message to all users except current user
 void broadcast_message(char* msg, int fd){
     pthread_mutex_lock(&clients_mutex);
@@ -180,17 +124,38 @@ void send_private_message(char *msg, char* username){
     pthread_mutex_unlock(&clients_mutex);
 }
 
-void * client_handler(void *arg) {
-    struct client_t *client = (struct client_t *) arg;
+FILE *accept_client(int server_fd) {
+    struct sockaddr client_addr;
+    socklen_t client_len = sizeof(struct sockaddr);
+
+    // accept the incoming connection by creating a new socket for the client
+    int client_fd = accept(server_fd, &client_addr, &client_len);
+    if (client_fd < 0) {
+        fprintf(stderr, "%s:\terror:\tfailed to accept client: %s\n", __FILE__, strerror(errno));
+    }
+
+    FILE *client_file = fdopen(client_fd, "w+");
+    if (!client_file) {
+        fprintf(stderr, "%s:\terror:\tfailed to fdopen: %s\n", __FILE__, strerror(errno));
+        close(client_fd);
+    }
+
+    return client_file;
+}
+
+void * client_handler(void* arg) {
+
+    struct client_t *client = (struct client_t*) arg;
+    int client_file = client->client_file;
+
     int flag = 0;
     while (1) {
         char buffer[BUFSIZ];
+        printf("Started handler\n");
 
         // Receive input from connected client
-        while (fgets(buffer, BUFSIZ, client->client_file)) {
+        while (fgets(buffer, BUFSIZ, client_file)) {
             rstrip(buffer);         // remove \n char from the buffer received
-
-            int client_file = client->client_file;
 
             printf("on server receive: %s\n", buffer);
             // determine if the message is a data message or a command message
@@ -199,6 +164,7 @@ void * client_handler(void *arg) {
                 // send readyBroadcast
                 if (streq(buffer, "Cbroadcast")) {
                     flag = 1;
+                    printf("BROADCAST\n");
                     fputs("readyBroadcast", client_file);
                     fflush(client_file);
 
@@ -231,7 +197,7 @@ void * client_handler(void *arg) {
             }
 
             fputs(buffer, stdout);
-            fputs(buffer, client->client_file);
+            fputs(buffer, client_file);
         }
     }
 }
@@ -255,12 +221,25 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Waiting for connections...\n");
+
+    // accept the incoming connection by creating a new socket for the client
+    struct sockaddr client_addr;
+    socklen_t client_len = sizeof(struct sockaddr);
+
+    pthread_t server_thread;
+
     while (1) {
-        // accept a client connection
+
         FILE *client_file = accept_client(server_fd);
         if (!client_file) {
             continue;
         }
+
+        // TODO: Fix this connection.
+        // fgets should be using a file descriptor
+        // Dont think we need the FILE returned by accept_client
+
+        printf("Connection accepted.\n");
 
         // receive username and password from the client
         char username[BUFSIZ] = {0};
@@ -281,8 +260,10 @@ int main(int argc, char *argv[]) {
             if (register_status != 0) {
                 fprintf(stderr, "%s:\terror:\tfailed to register user: %s", __FILE__, strerror(errno));
                 fclose(client_file);
-                continue;
+                exit(1);
             }
+
+
         } else {
             fputs("user is registered\n", client_file);
             fflush(client_file);
@@ -312,7 +293,7 @@ int main(int argc, char *argv[]) {
 
             if (streq(password_attempt, "control-c")) {
                 fclose(client_file);
-                continue;
+                exit(1);
             }
         }
 
@@ -325,8 +306,10 @@ int main(int argc, char *argv[]) {
 
         client_list_add(active_clients, new_client);
 
-        // TODO: May have to create this thread as soon as connection is made
-        // Then we do all the user auth in the client_handler
-        pthread_create(&new_client->thread, NULL, client_handler, new_client);
+        if (pthread_create(&server_thread, NULL, client_handler, new_client) < 0) {
+            perror("Error: No thread was created\n");
+            exit(1);
+        }
+
     }
 }
