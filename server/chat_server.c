@@ -228,6 +228,17 @@ int main(int argc, char *argv[]) {
 
     pthread_t server_thread;
 
+    //*** TODO: Try this instead: ***//
+    /*
+        int client_fd;
+
+        while (client_fd = accept(server_fd, (struct sockaddr *)&client_addr, client_len)) {
+            // Then do user auth stuff (ends down near line 309)
+            // Then create the client struct
+        }
+
+    */
+
     while (1) {
 
         FILE *client_file = accept_client(server_fd);
