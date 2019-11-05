@@ -195,6 +195,14 @@ FILE *open_socket(char *host, char *port) {
 // }
 
 /* Define Functions */
+void prompt() {
+    printf("Enter P for private conversation.\n");
+    printf("Enter B for message broadcasting.\n");
+    printf("Enter H for chat history.\n");
+    printf("Enter X for exit.\n");
+    printf(">> ");
+    fflush(stdout);
+}
 
 /* Main Execution */
 int main(int argc, char *argv[]) {
@@ -218,7 +226,7 @@ int main(int argc, char *argv[]) {
     // send username to the server
     char full_username[BUFSIZ] = {0};
     sprintf(full_username, "%s\n", username);
-    fputs(full_username, client_file);
+    fputs(full_username, client_file); fflush(client_file);
 
     // prompt user for password
     char server_response[BUFSIZ] = {0};
@@ -228,25 +236,39 @@ int main(int argc, char *argv[]) {
         printf("New user? Create password >> ");
         char new_password[BUFSIZ] = {0};
         fgets(new_password, BUFSIZ, stdin);
-        fputs(new_password, client_file);
+        fputs(new_password, client_file); fflush(client_file);
     } else {
-        printf("Welcome back, %s!\n", username);
+        printf("Welcome back! Enter password >> ");
+        char password_attempt[BUFSIZ] = {0};
+        fgets(password_attempt, BUFSIZ, stdin);
+        fputs(password_attempt, client_file); fflush(client_file);
+        memset(server_response, 0, BUFSIZ);
+        while (fgets(server_response, BUFSIZ, client_file)) {
+            rstrip(server_response);
+            if (streq(server_response, "login successful")) {
+                printf("Welcome %s!\n", username); fflush(stdout);
+                break;
+            } else if (streq(server_response, "incorrect password")) {
+                printf("Invalid password.\n");
+                printf("Please enter again >> ");
+                memset(password_attempt, 0, BUFSIZ);
+                fgets(password_attempt, BUFSIZ, stdin);
+                fputs(password_attempt, client_file); fflush(client_file);
+            } else {
+                printf("Server error: %s\n", server_response); fflush(stdout);
+                return EXIT_FAILURE;
+            }
+        }
     }
 
-    // // check if the user exists in file
-    // if (login_sign_up(user_name) != 0) {
-    //     EXIT_FAILURE;
-    // } else {
-    //     while (1) {
-    //         printf("Enter P for private conversation.\n");
-    //         printf("Enter B for message broadcasting.\n");
-    //         printf("Enter H for chat history.\n");
-    //         printf("Enter X for exit.\n");
-    //         printf(">>");
-    //
-    //         // TODO: Place command handling from stdin
-    //     }
-    // }
+    while (1) {
+        char command[BUFSIZ] = {0};
+        fgets(command, BUFSIZ, stdin);
+
+        // handle command appropriately
+
+        fputs(command, stdout); fflush(client_file);
+    }
 
     return EXIT_SUCCESS;
 }

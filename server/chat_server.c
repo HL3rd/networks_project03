@@ -212,14 +212,16 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
+        printf("Connection accepted.\n"); fflush(stdout);
+
         // receive username and password from the client
         char username[BUFSIZ] = {0};
         fgets(username, BUFSIZ, client_file);
         rstrip(username);
-        
+
         char *password = user_is_registered(username);
         if (!password) {    // user is not registered
-            fputs("new user\n", client_file);
+            fputs("new user\n", client_file); fflush(client_file);
 
             // if the client is a new user, save the password
             char new_password[BUFSIZ] = {0};
@@ -228,38 +230,29 @@ int main(int argc, char *argv[]) {
 
             int register_status = user_register(username, new_password);
             if (register_status != 0) {
-                fprintf(stderr, "%s:\terror:\tfailed to register user: %s", __FILE__, strerror(errno));
+                fprintf(stderr, "%s:\terror:\tfailed to register user: %s\n", __FILE__, strerror(errno));
                 fclose(client_file);
                 continue;
             }
         } else {
-            fputs("user is registered\n", client_file);
+            fputs("user is registered\n", client_file); fflush(client_file);
 
             // if the client is an existing user, check the password credentials
             char password_attempt[BUFSIZ] = {0};
             while (fgets(password_attempt, BUFSIZ, client_file)) {
-                if (streq(password_attempt, "control-c")) {
-                    break;
-                }
-
                 int login_status = user_login(username, password_attempt);
                 if (login_status == 0) {                // login success
-                    fputs("pass", client_file);
+                    fputs("login successful\n", client_file); fflush(client_file);
                     break;
                 } else {
                     if (login_status == -1) {           // username found but incorrect password
-                        fputs("incorrect password", client_file);
+                        fputs("incorrect password\n", client_file); fflush(client_file);
                     } else if (login_status == -2) {    // username not found
-                        fputs("username not found", client_file);
+                        fputs("username not found\n", client_file); fflush(client_file);
                     } else {                            // error opening the users registry file
-                        fputs("server error", client_file);
+                        fputs("server error\n", client_file); fflush(client_file);
                     }
                 }
-            }
-
-            if (streq(password_attempt, "control-c")) {
-                fclose(client_file);
-                continue;
             }
         }
 
@@ -271,8 +264,8 @@ int main(int argc, char *argv[]) {
         }
 
         client_list_add(active_clients, new_client);
+        client_list_print(active_clients);
 
-        // check to see if it is a new or existing user
-        pthread_create(&new_client->thread, NULL, client_handler, new_client);
+        // pthread_create(&new_client->thread, NULL, client_handler, new_client);
     }
 }

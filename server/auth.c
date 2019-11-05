@@ -13,7 +13,7 @@
 
 char *user_is_registered(char *username) {
     FILE *registry = fopen(USERS_FILENAME, "r");
-    if (!registry){
+    if (!registry) {
         registry = fopen(USERS_FILENAME, "w");
         return NULL;
     }
@@ -33,33 +33,32 @@ char *user_is_registered(char *username) {
 }
 
 int user_register(char *username, char *password) {
-    FILE *fp = fopen(USERS_FILENAME, "a+");
-    if (fp == NULL){
+    FILE *registry = fopen(USERS_FILENAME, "a+");
+    if (!registry) {
         printf("%s:\terror: failed to open %s: %s\n", __FILE__, USERS_FILENAME, strerror(errno));
         return 1;
     }
 
-    char user_registry[BUFSIZ] = {0};
-    sprintf(user_registry, "%s %s\n", username, password);
-    fputs(user_registry, fp);
-    fclose(fp);
+    char entry[BUFSIZ] = {0};
+    sprintf(entry, "%s %s\n", username, password);
+    fputs(entry, registry);
+    fclose(registry);
     return 0;
 }
 
 int user_login(char *username, char *password) {
-    FILE *fp = fopen(USERS_FILENAME, "r");
-    if (fp == NULL){
+    FILE *registry = fopen(USERS_FILENAME, "r");
+    if (!registry) {
         printf("%s:\terror: failed to open %s: %s\n", __FILE__, USERS_FILENAME, strerror(errno));
         return 1;
     }
 
-    char *line = NULL;
-    size_t len = 0;
-    while ((getline(&line, &len, fp)) != -1) {
-        char *entry_username = strtok(line, " ");
-        if (streq(entry_username, username)) {      // found the user
-            char *entry_password = strtok(NULL, " ");
-            if (streq(entry_password, password)) {  // correct password
+    char line[BUFSIZ] = {0};
+    while (fgets(line, BUFSIZ, registry)) {
+        char *registry_username = strtok(line, " ");
+        if (streq(registry_username, username)) {       // found the user
+            char *registry_password = strtok(NULL, " ");
+            if (streq(registry_password, password)) {   // correct password
                 return 0;
             }
 
@@ -67,6 +66,6 @@ int user_login(char *username, char *password) {
         }
     }
 
-    fclose(fp);
+    fclose(registry);
     return -2;
 }
