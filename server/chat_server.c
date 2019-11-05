@@ -23,6 +23,7 @@
 #include "client.h"
 #include "client_list.h"
 #include "auth.h"
+#include "utils.h"
 
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
@@ -203,7 +204,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    printf("Waiting for connection...\n");
+    printf("Waiting for connections...\n");
     while (1) {
         // accept a client connection
         FILE *client_file = accept_client(server_fd);
@@ -214,14 +215,17 @@ int main(int argc, char *argv[]) {
         // receive username and password from the client
         char username[BUFSIZ] = {0};
         fgets(username, BUFSIZ, client_file);
-
+        rstrip(username);
+        
         char *password = user_is_registered(username);
         if (!password) {    // user is not registered
-            fputs("no user", client_file);
+            fputs("new user\n", client_file);
 
             // if the client is a new user, save the password
             char new_password[BUFSIZ] = {0};
             fgets(new_password, BUFSIZ, client_file);
+            rstrip(new_password);
+
             int register_status = user_register(username, new_password);
             if (register_status != 0) {
                 fprintf(stderr, "%s:\terror:\tfailed to register user: %s", __FILE__, strerror(errno));
@@ -229,7 +233,7 @@ int main(int argc, char *argv[]) {
                 continue;
             }
         } else {
-            fputs("user is registered", client_file);
+            fputs("user is registered\n", client_file);
 
             // if the client is an existing user, check the password credentials
             char password_attempt[BUFSIZ] = {0};

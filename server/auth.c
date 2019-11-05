@@ -12,24 +12,23 @@
 #define USERS_FILENAME "users.txt"
 
 char *user_is_registered(char *username) {
-    FILE *fp = fopen(USERS_FILENAME, "r");
-    if (fp == NULL){
-        printf("%s:\terror: failed to open %s: %s\n", __FILE__, USERS_FILENAME, strerror(errno));
+    FILE *registry = fopen(USERS_FILENAME, "r");
+    if (!registry){
+        registry = fopen(USERS_FILENAME, "w");
         return NULL;
     }
 
-    char *line = NULL;
-    size_t len = 0;
-    while ((getline(&line, &len, fp)) != -1) {
-        char *name = strtok(line, " ");
-        if (streq(name, username)) {    // found the user
+    char line[BUFSIZ] = {0};
+    while (fgets(line, BUFSIZ, registry)) {
+        char *registry_username = strtok(line, " ");
+        if (streq(registry_username, username)) {    // found the user
             char *password = strtok(NULL, " ");
-            fclose(fp);
+            fclose(registry);
             return password;
         }
     }
 
-    fclose(fp);
+    fclose(registry);
     return NULL;
 }
 
@@ -41,7 +40,7 @@ int user_register(char *username, char *password) {
     }
 
     char user_registry[BUFSIZ] = {0};
-    sprintf(user_registry, "%s %s", username, password);
+    sprintf(user_registry, "%s %s\n", username, password);
     fputs(user_registry, fp);
     fclose(fp);
     return 0;

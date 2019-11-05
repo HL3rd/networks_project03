@@ -12,7 +12,7 @@ TARGETS	= chatserver
 
 all: $(TARGETS)
 
-chatserver: chat_server.c client.c client_list.c auth.c
+chatserver: chat_server.c client.c client_list.c auth.c utils.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:

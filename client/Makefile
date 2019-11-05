@@ -8,11 +8,12 @@
 CC		= gcc
 CFLAGS	= -Wall
 
-TARGETS	= myclient
+TARGETS	= chatclient
+.PHONY: all clean
 
 all: $(TARGETS)
 
-myclient: chat_client.c
+chatclient: chat_client.c utils.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 clean:
