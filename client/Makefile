@@ -6,7 +6,7 @@
 # 	Horacio Lopez (hlopez1)
 
 CC		= gcc
-CFLAGS	= -Wall
+CFLAGS	= -Wall -pthread
 
 TARGETS	= chatclient
 .PHONY: all clean

@@ -27,8 +27,17 @@
 
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
+#define MAX_CLIENTS 100
 
 /* Define Structures */
+typedef struct {
+    int client_file;                  /* Connection file descriptor */
+    char username[50];                /* Client name */
+} client_t;
+
+client_t *clients[MAX_CLIENTS];
+
+pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Define Functions */
 int open_socket(const char *port) {
@@ -106,19 +115,19 @@ void *connection_handler(void *socket_desc) {
     char *message , client_message[2000];
 
     //Send some messages to the client
-    message = "Greetings! I am your connection handler\n";
-    write(sock , message , strlen(message));
+    message = "Greetings! I am your connection handler in server\n";
+    write(sock, message, strlen(message));
 
     message = "Now type something and i shall repeat what you type \n";
-    write(sock , message , strlen(message));
+    write(sock, message, strlen(message));
 
     //Receive a message from client
-    while( (read_size = recv(sock , client_message , 2000 , 0)) > 0 ) {
+    while((read_size = recv(sock, client_message, 2000, 0)) > 0 ) {
         //end of string marker
 		client_message[read_size] = '\0';
 
 		//Send the message back to client
-        write(sock , client_message , strlen(client_message));
+        write(sock, client_message, strlen(client_message));
 
 		//clear the message buffer
 		memset(client_message, 0, 2000);
@@ -134,50 +143,87 @@ void *connection_handler(void *socket_desc) {
     return 0;
 }
 
-// function to send message to all clients except sender
-// void broadcast_message(char *s, int uid){
-//     pthread_mutex_lock(&clients_mutex);
-//     int i;
-//     for (i = 0; i < MAX_CLIENTS; ++i) {
-//         if (clients[i]) {
-//             if (clients[i]->uid != uid) {
-//                 if (write(clients[i]->client_fd, s, strlen(s)) < 0) {
-//                     perror("Write to descriptor failed");
-//                     break;
-//                 }
-//             }
-//         }
-//     }
-//     pthread_mutex_unlock(&clients_mutex);
-// }
-//
-// // Send message to specific client
-// void send_private_message(char *s, int uid){
-//     pthread_mutex_lock(&clients_mutex);
-//     int i;
-//     for (i = 0; i < MAX_CLIENTS; ++i){
-//         if (clients[i]) {
-//             if (clients[i]->uid == uid) {
-//                 if (write(clients[i]->client_fd, s, strlen(s))<0) {
-//                     perror("Write to descriptor failed");
-//                     break;
-//                 }
-//             }
-//         }
-//     }
-//     pthread_mutex_unlock(&clients_mutex);
-// }
+// Send message to all users except current user
+void broadcast_message(char* msg, int fd){
+    pthread_mutex_lock(&clients_mutex);
+    int i;
+    for (i = 0; i < MAX_CLIENTS; ++i) {
+        if (clients[i]) {
+            if (clients[i]->client_file != fd) {
+                if (write(clients[i]->client_file, msg, strlen(msg)) < 0) {
+                    perror("Write to descriptor failed");
+                    break;
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+// Send message to specific client
+void send_private_message(char *msg, char* username){
+    pthread_mutex_lock(&clients_mutex);
+    int i;
+    for (i = 0; i < MAX_CLIENTS; ++i){
+        if (clients[i]) {
+            if (streq(clients[i]->username, username)) {
+                if (write(clients[i]->client_file, msg, strlen(msg))<0) {
+                    perror("Write to descriptor failed");
+                    break;
+                }
+            }
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
 
 void * client_handler(void *arg) {
     struct client_t *client = (struct client_t *) arg;
+    int flag = 0;
     while (1) {
         char buffer[BUFSIZ];
+        // receive input
+        // First need a command, then will receive a message
         while (fgets(buffer, BUFSIZ, client->client_file)) {
+            rstrip(buffer);         // remove \n char from the buffer received
+
+            int client_file = client->client_file;
+
             // determine if the message is a data message or a command message
-            if (buffer[0] != 0 && buffer[0] == 'D') {            // data message
+            if (buffer[0] != 0 && buffer[0] == 'C') {     // command message
 
-            } else if (buffer[0] != 0 && buffer[0] == 'C') {     // command message
+                // send readyBroadcast
+                if (streq(buffer, "Cbroadcast")) {
+                    flag = 1;
+                    fputs("readyBroadcast", client_file);
+                    fflush(client_file);
 
+                    char* broadcastMsg[BUFSIZ];
+                    fgets(broadcastMsg, BUFSIZ, client_file);
+                    rstrip(broadcastMsg);
+
+                    broadcast_message(broadcastMsg, client_file);
+                } else if (streq(buffer, "Cprivate")) {
+                    flag = 2;
+                    fputs("readyPrivate", client_file);
+                    fflush(client_file);
+
+                    char* userNameBuffer[BUFSIZ];
+                    fgets(userNameBuffer, BUFSIZ, client_file);
+                    rstrip(userNameBuffer);
+
+                    char* privateMsg[BUFSIZ];
+                    fgets(privateMsg, BUFSIZ, client_file);
+                    rstrip(privateMsg);
+
+                    send_private_message(privateMsg, userNameBuffer);
+                }
+            } else {                // data message
+                if (flag == 1) {
+                    broadcast_message(buffer, client_file);
+                } else if (flag == 2) {
+                    send_private_message(buffer, client_file);
+                }
             }
 
             fputs(buffer, stdout);
@@ -216,10 +262,11 @@ int main(int argc, char *argv[]) {
         char username[BUFSIZ] = {0};
         fgets(username, BUFSIZ, client_file);
         rstrip(username);
-        
+
         char *password = user_is_registered(username);
         if (!password) {    // user is not registered
             fputs("new user\n", client_file);
+            fflush(client_file);
 
             // if the client is a new user, save the password
             char new_password[BUFSIZ] = {0};
@@ -234,6 +281,7 @@ int main(int argc, char *argv[]) {
             }
         } else {
             fputs("user is registered\n", client_file);
+            fflush(client_file);
 
             // if the client is an existing user, check the password credentials
             char password_attempt[BUFSIZ] = {0};
@@ -244,15 +292,16 @@ int main(int argc, char *argv[]) {
 
                 int login_status = user_login(username, password_attempt);
                 if (login_status == 0) {                // login success
-                    fputs("pass", client_file);
+                    fputs("pass\n", client_file);
+                    fflush(client_file);
                     break;
                 } else {
                     if (login_status == -1) {           // username found but incorrect password
-                        fputs("incorrect password", client_file);
+                        fputs("incorrect password\n", client_file);
                     } else if (login_status == -2) {    // username not found
-                        fputs("username not found", client_file);
+                        fputs("username not found\n", client_file);
                     } else {                            // error opening the users registry file
-                        fputs("server error", client_file);
+                        fputs("server error\n", client_file);
                     }
                 }
             }
@@ -272,7 +321,8 @@ int main(int argc, char *argv[]) {
 
         client_list_add(active_clients, new_client);
 
-        // check to see if it is a new or existing user
+        // TODO: May have to create this thread as soon as connection is made
+        // Then we do all the user auth in the client_handler
         pthread_create(&new_client->thread, NULL, client_handler, new_client);
     }
 }
