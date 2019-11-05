@@ -92,18 +92,19 @@ FILE *accept_client(int server_fd) {
     struct sockaddr client_addr;
     socklen_t client_len = sizeof(struct sockaddr);
 
+    printf("Accepting 1\n");
     // accept the incoming connection by creating a new socket for the client
     int client_fd = accept(server_fd, &client_addr, &client_len);
     if (client_fd < 0) {
         fprintf(stderr, "%s:\terror:\tfailed to accept client: %s\n", __FILE__, strerror(errno));
     }
-
+    printf("Accepting 2\n");
     FILE *client_file = fdopen(client_fd, "w+");
     if (!client_file) {
         fprintf(stderr, "%s:\terror:\tfailed to fdopen: %s\n", __FILE__, strerror(errno));
         close(client_fd);
     }
-
+    printf("Accepting 3\n");
     return client_file;
 }
 
@@ -191,6 +192,7 @@ void * client_handler(void *arg) {
 
             int client_file = client->client_file;
 
+            printf("on server receive: %s\n", buffer);
             // determine if the message is a data message or a command message
             if (buffer[0] != 0 && buffer[0] == 'C') {     // command message
 
