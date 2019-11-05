@@ -21,3 +21,15 @@ void rstrip(char *s) {
         i--;
     }
 }
+
+void rstrip_c(char *s, char c) {
+    if (!s || strlen(s) == 0) {
+        return;
+    }
+
+    int i = strlen(s) - 1;
+    while (i >= 0 && *(s + i) == c) {
+        *(s + i) = 0;
+        i--;
+    }
+}

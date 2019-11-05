@@ -23,12 +23,17 @@
 #include "client.h"
 #include "client_list.h"
 #include "auth.h"
+#include "command_handler.h"
 #include "utils.h"
 
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
 
 /* Define Structures */
+struct thread_arg_t {
+    struct client_t *client;
+    struct client_list *active_clients;
+};
 
 /* Define Functions */
 int open_socket(const char *port) {
@@ -98,90 +103,44 @@ FILE *accept_client(int server_fd) {
     return client_file;
 }
 
-// handle connection for each client
-void *connection_handler(void *socket_desc) {
-    //Get the socket descriptor
-    int sock = *(int*)socket_desc;
-    int read_size;
-    char *message , client_message[2000];
-
-    //Send some messages to the client
-    message = "Greetings! I am your connection handler\n";
-    write(sock , message , strlen(message));
-
-    message = "Now type something and i shall repeat what you type \n";
-    write(sock , message , strlen(message));
-
-    //Receive a message from client
-    while( (read_size = recv(sock , client_message , 2000 , 0)) > 0 ) {
-        //end of string marker
-		client_message[read_size] = '\0';
-
-		//Send the message back to client
-        write(sock , client_message , strlen(client_message));
-
-		//clear the message buffer
-		memset(client_message, 0, 2000);
-    }
-
-    if(read_size == 0) {
-        puts("Client disconnected");
-        fflush(stdout);
-    } else if(read_size == -1) {
-        perror("recv failed");
-    }
-
-    return 0;
-}
-
-// function to send message to all clients except sender
-// void broadcast_message(char *s, int uid){
-//     pthread_mutex_lock(&clients_mutex);
-//     int i;
-//     for (i = 0; i < MAX_CLIENTS; ++i) {
-//         if (clients[i]) {
-//             if (clients[i]->uid != uid) {
-//                 if (write(clients[i]->client_fd, s, strlen(s)) < 0) {
-//                     perror("Write to descriptor failed");
-//                     break;
-//                 }
-//             }
-//         }
-//     }
-//     pthread_mutex_unlock(&clients_mutex);
-// }
-//
-// // Send message to specific client
-// void send_private_message(char *s, int uid){
-//     pthread_mutex_lock(&clients_mutex);
-//     int i;
-//     for (i = 0; i < MAX_CLIENTS; ++i){
-//         if (clients[i]) {
-//             if (clients[i]->uid == uid) {
-//                 if (write(clients[i]->client_fd, s, strlen(s))<0) {
-//                     perror("Write to descriptor failed");
-//                     break;
-//                 }
-//             }
-//         }
-//     }
-//     pthread_mutex_unlock(&clients_mutex);
-// }
-
-void * client_handler(void *arg) {
-    struct client_t *client = (struct client_t *) arg;
+void *client_handler(void *arg) {
+    struct thread_arg_t *thread_arg = (struct thread_arg_t *) arg;
     while (1) {
-        char buffer[BUFSIZ];
-        while (fgets(buffer, BUFSIZ, client->client_file)) {
-            // determine if the message is a data message or a command message
-            if (buffer[0] != 0 && buffer[0] == 'D') {            // data message
-
-            } else if (buffer[0] != 0 && buffer[0] == 'C') {     // command message
-
+        char buffer[BUFSIZ] = {0};
+        while (fgets(buffer, BUFSIZ, thread_arg->client->client_file)) {
+            if (buffer[0] != 0 && buffer[0] == 'C') {           // command message
+                // handle the command appropriately
+                if (buffer[1] != 0 && buffer[1] == 'B') {
+                    if (broadcast_message_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        continue;
+                    }
+                } else if (buffer[1] != 0 && buffer[1] == 'P') {
+                    if (private_message_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        continue;
+                    }
+                } else if (buffer[1] != 0 && buffer[1] == 'H') {
+                    if (history_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        continue;
+                    }
+                } else if (buffer[1] != 0 && buffer[1] == 'X') {
+                    if (exit_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        continue;
+                    }
+                } else {
+                    fprintf(stderr, "%s:\terror:\tunexpected command message received: %s\n", __FILE__, buffer);
+                    continue;
+                }
+            } else if (buffer[0] != 0 && buffer[0] == 'D') {    // data message
+                fprintf(stderr, "%s:\terror:\tunexpected data message received\n", __FILE__);
+                continue;
+            } else {
+                fprintf(stderr, "%s:\terror:\tinvalid message format for following message: %s\n", __FILE__, buffer);
+                continue;
             }
-
-            fputs(buffer, stdout);
-            fputs(buffer, client->client_file);
         }
     }
 }
@@ -215,7 +174,14 @@ int main(int argc, char *argv[]) {
         printf("Connection accepted.\n"); fflush(stdout);
 
         // receive username and password from the client
-        char username[BUFSIZ] = {0};
+        char *username = malloc(BUFSIZ);
+        if (!username) {
+            fprintf(stderr, "%s:\terror:\tfailed to malloc username: %s\n", __FILE__, strerror(errno));
+            fclose(client_file);
+            return EXIT_FAILURE;
+        }
+
+        memset(username, 0, BUFSIZ);
         fgets(username, BUFSIZ, client_file);
         rstrip(username);
 
@@ -264,8 +230,15 @@ int main(int argc, char *argv[]) {
         }
 
         client_list_add(active_clients, new_client);
-        client_list_print(active_clients);
 
-        // pthread_create(&new_client->thread, NULL, client_handler, new_client);
+        struct thread_arg_t *arg = malloc(sizeof(struct thread_arg_t));
+        if (!arg) {
+            fprintf(stderr, "%s:\terror:\tfailed to malloc struct for thread argument: %s", __FILE__, strerror(errno));
+            return EXIT_FAILURE;
+        }
+
+        arg->active_clients = active_clients;
+        arg->client = new_client;
+        pthread_create(&new_client->thread, NULL, client_handler, arg);
     }
 }

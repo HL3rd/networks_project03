@@ -28,13 +28,13 @@ void client_list_add(struct client_list *list, struct client_t *client) {
     if (!list->head && !list->tail) {
         list->head = client;
         list->tail = client;
-
     } else {
         client->prev = list->tail;
         list->tail->next = client;
         list->tail = client;
     }
 
+    list->size = list->size + 1;
     pthread_mutex_unlock(&list->mutex);
 }
 
@@ -86,23 +86,27 @@ void client_list_remove(struct client_list *list, char *client_username) {
 }
 
 void client_list_print(struct client_list *list) {
+    pthread_mutex_lock(&list->mutex);
     printf("Forward Traversal:\n");
     struct client_t *current = list->head;
     int i = 0;
     while (current) {
-        printf("Client #%d: %s\n", i++, current->username);
+        printf("Client #%d: %s, File: %p\n", i++, current->username, current->client_file);
         printf("\tprev: %p  next: %p\n", current->prev, current->next);
         current = current->next;
     }
 
+    printf("\n");
     printf("Reverse Traversal:\n");
     current = list->tail;
     i = list->size - 1;
     while (current) {
-        printf("Client #%d: %s\n", i--, current->username);
+        printf("Client #%d: %s, File: %p\n", i--, current->username, current->client_file);
         printf("\tprev: %p  next: %p\n", current->prev, current->next);
         current = current->prev;
     }
+
+    pthread_mutex_unlock(&list->mutex);
 }
 
 void client_list_destroy(struct client_list *list) {

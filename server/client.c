@@ -25,5 +25,6 @@ struct client_t *client_init(FILE *client_file, char *username) {
 
 void client_destroy(struct client_t *client) {
     fclose(client->client_file);
+    free(client->username);
     free(client);
 }

@@ -10,5 +10,6 @@
 #define UTILS_H
 
 void rstrip(char *s);
+void rstrip_c(char *s, char c);
 
 #endif

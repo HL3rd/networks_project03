@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
@@ -17,31 +19,23 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <pthread.h>
 
+#include "message.h"
+#include "message_queue.h"
+#include "command_handler.h"
 #include "utils.h"
 
 /* Define Macros */
 #define streq(a, b) (strcmp(a, b) == 0)
 
 /* Define Structures */
+struct thread_arg_t {
+    FILE *client_file;
+    struct message_queue_t *message_queue;
+};
 
-/* Define Utilities */
-void concatenate_string(char *original, char *add)
-{
-   while(*original) {
-       original++;
-   }
-
-
-   while(*add) {
-       *original = *add;
-       add++;
-       original++;
-   }
-
-   *original = '\0';
-}
-
+/* Define Functions */
 FILE *open_socket(char *host, char *port) {
 	// get linked list of DNS results for corresponding host and port
     struct addrinfo hints;
@@ -94,107 +88,6 @@ FILE *open_socket(char *host, char *port) {
     return client_file;
 }
 
-// int send_command(int client_fd, char *buffer) {
-// 	const int CMD_SIZE = 4;
-// 	ssize_t bytes_sent = 0;
-// 	do {
-// 		bytes_sent += send(client_fd, buffer, CMD_SIZE, 0);
-// 		if (bytes_sent < 0) {
-// 			fprintf(stderr, "%s:\terror:\tunable to send %s command to the server: %s\n", __FILE__, buffer, strerror(errno));
-// 			return -1;
-// 		}
-// 	} while (bytes_sent < CMD_SIZE);
-//
-// 	return 0;
-// }
-//
-// // function returns 0 if use properly logs in or signs up
-// int login_sign_up(char* user_name) {
-//     FILE *fp = fopen("users.txt", "r");
-//     if (fp == NULL){
-//         printf("Error checking users file\n");
-//         return 1;
-//     }
-//
-//     char* line = NULL;
-//     size_t len = 0;
-//
-//     while ((getline(&line, &len, fp)) != -1) {
-//         char* name = strtok(line, " ");
-//         if (streq(name, user_name)) {
-//             // found the user, prompt for password to login
-//             char* password = strtok(NULL, " ");
-//             fclose(fp);
-//             // Note: if <name> fails, use <user_name>
-//             int pass = password_prompt(password, name);
-//             return pass;
-//         }
-//     }
-//
-//     fclose(fp);
-//     int user = create_new_user(user_name);
-//     return user;
-// }
-//
-// // loop that asks for existing user password
-// int password_prompt(char* password, char* name) {
-//     while(1) {
-//         printf("Welcome back! Enter passsword >> ");
-//
-//         // accept user input from stdin
-//         char buffer[BUFSIZ] = {0};
-//         while (fgets(buffer, BUFSIZ, stdin)) {
-//             // get the password attempt from the stdin buffer
-//     		char* attempt = strtok(buffer, " ");
-//
-//             while (1) {
-//                 if (streq(attempt, password)) {
-//                     // Successful login
-//                     printf("Welcome %s!\n", name);
-//                     return 0;
-//                 } else {
-//                     printf("Invalid password.\n");
-//                     printf("Please enter again >> ");
-//                     continue;
-//                 }
-//             }
-//
-//         }
-//     }
-// }
-//
-// // create new user
-// int create_new_user(char* name) {
-//     char* new_pair = name;
-//     concatenate_string(new_pair, " ");
-//
-//     printf("New user? Create password >> ");
-//     // accept user input from stdin
-//     char buffer[BUFSIZ] = {0};
-//     while (fgets(buffer, BUFSIZ, stdin)) {
-//         // get the new password
-// 		char* new_password = strtok(buffer, " ");
-//
-//         // set new 'user password' pair in users.txt
-//         FILE* user_db = fopen("users.txt", "w");
-//
-//         concatenate_string(new_pair, new_password);
-//
-//         int results = fputs(new_pair, user_db);
-//         if (results == EOF) {
-//             // Failed to write do error code here.
-//             fprintf(stderr, "Error creating user: %s\n", name);
-//             fclose(user_db);
-//             return 1;
-//         }
-//         fclose(user_db);
-//         return 0;
-//     }
-//
-//     return 1;
-// }
-
-/* Define Functions */
 void prompt() {
     printf("Enter P for private conversation.\n");
     printf("Enter B for message broadcasting.\n");
@@ -202,6 +95,41 @@ void prompt() {
     printf("Enter X for exit.\n");
     printf(">> ");
     fflush(stdout);
+}
+
+void *client_listener(void *arg_init) {
+    struct thread_arg_t *arg = (struct thread_arg_t *) arg_init;
+    char message[BUFSIZ] = {0};
+
+    // open a nonblocking stream for the client file
+    int copy_client_fd = dup(fileno(arg->client_file));
+    int flags = fcntl(copy_client_fd, F_GETFL, 0);
+    flags |= O_NONBLOCK;
+    fcntl(copy_client_fd, F_SETFL, flags);
+    FILE *client_file_nonblocking = fdopen(copy_client_fd, "w+");
+    if (!client_file_nonblocking) {
+        fprintf(stderr, "%s:\terror:\tfailed to fdopen: %s\n", __FILE__, strerror(errno));
+        close(copy_client_fd);
+        return NULL;
+    }
+
+    while (1) {
+        char *test = fgets(message, BUFSIZ, client_file_nonblocking);
+        if (!test && errno == EWOULDBLOCK) {
+            continue;
+        }
+
+        if (message[0] == 'D') {
+            fputs("\n\n ####################### New Message: ", stdout);
+            rstrip(&message[1]);
+            fputs(&message[1], stdout);
+            fputs("#######################\n\n", stdout); fflush(stdout);
+        } else {
+            rstrip(&message[1]);
+            struct message_t *m = message_init(&message[1]);
+            message_queue_push(arg->message_queue, m);
+        }
+    }
 }
 
 /* Main Execution */
@@ -228,7 +156,7 @@ int main(int argc, char *argv[]) {
     sprintf(full_username, "%s\n", username);
     fputs(full_username, client_file); fflush(client_file);
 
-    // prompt user for password
+    // prompt user for password and validate credentials
     char server_response[BUFSIZ] = {0};
     fgets(server_response, BUFSIZ, client_file);
     rstrip(server_response);
@@ -237,6 +165,7 @@ int main(int argc, char *argv[]) {
         char new_password[BUFSIZ] = {0};
         fgets(new_password, BUFSIZ, stdin);
         fputs(new_password, client_file); fflush(client_file);
+        printf("Welcome %s! Registration complete.\n", username); fflush(stdout);
     } else {
         printf("Welcome back! Enter password >> ");
         char password_attempt[BUFSIZ] = {0};
@@ -261,13 +190,59 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // create a thread to listen for incoming messages from other users
+    struct thread_arg_t *arg = malloc(sizeof(struct thread_arg_t));
+    if (!arg) {
+        fprintf(stderr, "%s:\terror:\tfailed to malloc thread argument structure: %s\n", __FILE__, strerror(errno));
+        return EXIT_FAILURE;
+    }
+
+    struct message_queue_t *message_queue = message_queue_init();
+    if (!message_queue) {
+        fprintf(stderr, "%s:\terror:\tfailed to create message queue: %s\n", __FILE__, strerror(errno));
+        return EXIT_FAILURE;
+    }
+
+    arg->client_file = client_file;
+    arg->message_queue = message_queue;
+    pthread_t thread;
+    pthread_create(&thread, NULL, client_listener, arg);
+
+    // receive and handle client commands
     while (1) {
+        prompt();
         char command[BUFSIZ] = {0};
         fgets(command, BUFSIZ, stdin);
 
-        // handle command appropriately
+        // remove endline char
+        rstrip(command);
+        rstrip_c(command, ' ');
 
-        fputs(command, stdout); fflush(client_file);
+        // handle command appropriately
+        if (streq(command, "B")) {
+            if (broadcast_message_handler(client_file, message_queue) != 0) {
+                fprintf(stderr, "%s:\terror:\tfailed to send broadcast message.\n", __FILE__);
+                continue;
+            }
+        } else if (streq(command, "P")) {
+            if (private_message_handler(client_file, message_queue) != 0) {
+                fprintf(stderr, "%s:\terror:\tfailed to send private message.\n", __FILE__);
+                continue;
+            }
+        } else if (streq(command, "H")) {
+            if (history_handler(client_file, message_queue) != 0) {
+                fprintf(stderr, "%s:\terror:\tfailed to retrieve history.\n", __FILE__);
+                continue;
+            }
+        } else if (streq(command, "X")) {
+            if (exit_handler(client_file, message_queue) != 0) {
+                fprintf(stderr, "%s:\terror:\tfailed to exit appropriately.\n", __FILE__);
+                return EXIT_FAILURE;
+            }
+        } else {
+            fprintf(stderr, "%s:\terror:\tplease enter a valid command.\n", __FILE__);
+            continue;
+        }
     }
 
     return EXIT_SUCCESS;
