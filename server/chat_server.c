@@ -157,6 +157,8 @@ void broadcast_message(char* msg, int fd){
             }
         }
     }
+
+    fputs("Broadcast success", fd);
     pthread_mutex_unlock(&clients_mutex);
 }
 
@@ -182,8 +184,8 @@ void * client_handler(void *arg) {
     int flag = 0;
     while (1) {
         char buffer[BUFSIZ];
-        // receive input
-        // First need a command, then will receive a message
+
+        // Receive input from connected client
         while (fgets(buffer, BUFSIZ, client->client_file)) {
             rstrip(buffer);         // remove \n char from the buffer received
 

@@ -101,7 +101,9 @@ void* receive_messages(void* socket) {
 
     int client_file = *(int *)socket;
 
+    printf("Getting here\n");
     printf("\t%d\n", client_file);
+    printf("Got this file then\n");
 
     char* messageBuffer[BUFSIZ];
     fgets(messageBuffer, sizeof(messageBuffer), client_file);
@@ -128,20 +130,23 @@ char* getOperation(){
     printf("Enter B for message broadcasting.\n");
     printf("Enter H for chat history.\n");
     printf("Enter X for exit.\n");
-    printf(">>");
+    printf(">> ");
 
     // Prepare max buffer
     char opBuffer[BUFSIZ];
     bzero(opBuffer, sizeof(opBuffer));
 
+    printf("Gimme fgets\n");
     if ((fgets(opBuffer, sizeof(opBuffer), stdin)) < 0) {
         printf("Failed to get user input");
     }
 
     // Remove new line character to avoid errors
-    opBuffer[strlen(opBuffer) - 1] = '\0';
+    // opBuffer[strlen(opBuffer) - 1] = '\0';
+    rstrip(opBuffer);
 
     // Continue to prompt for operation until a valid operation is recieved
+    printf("Down to isValid\n");
     while (!isValidOperation(opBuffer)) {
         printf("Error: Please a valid operation <B, P, H, X>:  \n");
 
@@ -233,19 +238,16 @@ int main(int argc, char *argv[]) {
         fputs(operation, client_file);
         fflush(client_file);
 
-        // Receive succesful ready confirmation from server
+        // Receive succesful ready confirmation or error from server
         char* commandConf[BUFSIZ];
         fgets(commandConf, BUFSIZ, client_file);
         rstrip(commandConf);
 
         if(streq(commandConf, "readyBroadcast")) {
+            bzero(commandConf, BUFSIZ);
             printf("Broadcasting\n");
 
-            // Get acknoledgment from server
-            char* confirmation[BUFSIZ];
-            char* readyState = fgets(confirmation, sizeof(confirmation), client_file);
-
-            // Get message
+            // Get message from user input
             bzero(stdinBuffer, sizeof(stdinBuffer));
             printf("Please enter your broadcast: "); // TODO: make this match the demo video
 
@@ -257,10 +259,11 @@ int main(int argc, char *argv[]) {
             fflush(client_file);
 
             // Receive confirmation from server that broadcast was executed
-            fgets(confirmation, sizeof(confirmation), client_file);
-            rstrip(confirmation);
+            fgets(commandConf, BUFSIZ, client_file);
+            rstrip(commandConf);
 
-            if (streq(confirmation, "Success Broadcast")) {
+            if (streq(commandConf, "Broadcast success")) {
+                bzero(commandConf, BUFSIZ);
                 // TODO: Change to match demo
                 printf("Successfully sent broadcast\n");
             } else {
