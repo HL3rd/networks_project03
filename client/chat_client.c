@@ -123,7 +123,7 @@ void *client_listener(void *arg_init) {
             fputs("\n\n ####################### New Message: ", stdout);
             rstrip(&message[1]);
             fputs(&message[1], stdout);
-            fputs("#######################\n\n", stdout); fflush(stdout);
+            fputs("#######################\n\n>> ", stdout); fflush(stdout);
         } else {
             rstrip(&message[1]);
             struct message_t *m = message_init(&message[1]);

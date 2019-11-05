@@ -31,7 +31,8 @@
 
 /* Define Structures */
 struct thread_arg_t {
-    struct client_t *client;
+    pthread_t *client_thread;
+    FILE *client_file;
     struct client_list *active_clients;
 };
 
@@ -105,28 +106,89 @@ FILE *accept_client(int server_fd) {
 
 void *client_handler(void *arg) {
     struct thread_arg_t *thread_arg = (struct thread_arg_t *) arg;
+    FILE *client_file = thread_arg->client_file;
+    struct client_list *active_clients = thread_arg->active_clients;
+
+    // receive username and password from the client
+    char *username = malloc(BUFSIZ);
+    if (!username) {
+        fprintf(stderr, "%s:\terror:\tfailed to malloc username: %s\n", __FILE__, strerror(errno));
+        fclose(client_file);
+        exit(EXIT_FAILURE);
+    }
+
+    memset(username, 0, BUFSIZ);
+    fgets(username, BUFSIZ, client_file);
+    rstrip(username);
+
+    char *password = user_is_registered(username);
+    if (!password) {    // user is not registered
+        fputs("new user\n", client_file); fflush(client_file);
+
+        // if the client is a new user, save the password
+        char new_password[BUFSIZ] = {0};
+        fgets(new_password, BUFSIZ, client_file);
+        rstrip(new_password);
+
+        int register_status = user_register(username, new_password);
+        if (register_status != 0) {
+            fprintf(stderr, "%s:\terror:\tfailed to register user: %s\n", __FILE__, strerror(errno));
+            fclose(client_file);
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        fputs("user is registered\n", client_file); fflush(client_file);
+
+        // if the client is an existing user, check the password credentials
+        char password_attempt[BUFSIZ] = {0};
+        while (fgets(password_attempt, BUFSIZ, client_file)) {
+            int login_status = user_login(username, password_attempt);
+            if (login_status == 0) {                // login success
+                fputs("login successful\n", client_file); fflush(client_file);
+                break;
+            } else {
+                if (login_status == -1) {           // username found but incorrect password
+                    fputs("incorrect password\n", client_file); fflush(client_file);
+                } else if (login_status == -2) {    // username not found
+                    fputs("username not found\n", client_file); fflush(client_file);
+                } else {                            // error opening the users registry file
+                    fputs("server error\n", client_file); fflush(client_file);
+                }
+            }
+        }
+    }
+
+    // create a struct client_t and add it to the client list
+    struct client_t *new_client = client_init(client_file, username);
+    if (!new_client) {
+        fclose(client_file);
+        exit(EXIT_FAILURE);
+    }
+
+    client_list_add(active_clients, new_client);
+
     while (1) {
         char buffer[BUFSIZ] = {0};
-        while (fgets(buffer, BUFSIZ, thread_arg->client->client_file)) {
+        while (fgets(buffer, BUFSIZ, client_file)) {
             if (buffer[0] != 0 && buffer[0] == 'C') {           // command message
                 // handle the command appropriately
                 if (buffer[1] != 0 && buffer[1] == 'B') {
-                    if (broadcast_message_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                    if (broadcast_message_handler(active_clients, client_file) != 0) {
                         fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'P') {
-                    if (private_message_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                    if (private_message_handler(active_clients, client_file) != 0) {
                         fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'H') {
-                    if (history_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                    if (history_handler(active_clients, client_file) != 0) {
                         fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'X') {
-                    if (exit_handler(thread_arg->active_clients, thread_arg->client->client_file) != 0) {
+                    if (exit_handler(active_clients, client_file) != 0) {
                         fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
                         continue;
                     }
@@ -173,72 +235,18 @@ int main(int argc, char *argv[]) {
 
         printf("Connection accepted.\n"); fflush(stdout);
 
-        // receive username and password from the client
-        char *username = malloc(BUFSIZ);
-        if (!username) {
-            fprintf(stderr, "%s:\terror:\tfailed to malloc username: %s\n", __FILE__, strerror(errno));
-            fclose(client_file);
-            return EXIT_FAILURE;
-        }
-
-        memset(username, 0, BUFSIZ);
-        fgets(username, BUFSIZ, client_file);
-        rstrip(username);
-
-        char *password = user_is_registered(username);
-        if (!password) {    // user is not registered
-            fputs("new user\n", client_file); fflush(client_file);
-
-            // if the client is a new user, save the password
-            char new_password[BUFSIZ] = {0};
-            fgets(new_password, BUFSIZ, client_file);
-            rstrip(new_password);
-
-            int register_status = user_register(username, new_password);
-            if (register_status != 0) {
-                fprintf(stderr, "%s:\terror:\tfailed to register user: %s\n", __FILE__, strerror(errno));
-                fclose(client_file);
-                continue;
-            }
-        } else {
-            fputs("user is registered\n", client_file); fflush(client_file);
-
-            // if the client is an existing user, check the password credentials
-            char password_attempt[BUFSIZ] = {0};
-            while (fgets(password_attempt, BUFSIZ, client_file)) {
-                int login_status = user_login(username, password_attempt);
-                if (login_status == 0) {                // login success
-                    fputs("login successful\n", client_file); fflush(client_file);
-                    break;
-                } else {
-                    if (login_status == -1) {           // username found but incorrect password
-                        fputs("incorrect password\n", client_file); fflush(client_file);
-                    } else if (login_status == -2) {    // username not found
-                        fputs("username not found\n", client_file); fflush(client_file);
-                    } else {                            // error opening the users registry file
-                        fputs("server error\n", client_file); fflush(client_file);
-                    }
-                }
-            }
-        }
-
-        // create a struct client_t and add it to the client list
-        struct client_t *new_client = client_init(client_file, username);
-        if (!new_client) {
-            fclose(client_file);
-            continue;
-        }
-
-        client_list_add(active_clients, new_client);
-
+        // generate thread
         struct thread_arg_t *arg = malloc(sizeof(struct thread_arg_t));
         if (!arg) {
             fprintf(stderr, "%s:\terror:\tfailed to malloc struct for thread argument: %s", __FILE__, strerror(errno));
             return EXIT_FAILURE;
         }
 
+        pthread_t *thread = malloc(sizeof(pthread_t));
+        arg->client_thread = thread;
+        arg->client_file = client_file;
         arg->active_clients = active_clients;
-        arg->client = new_client;
-        pthread_create(&new_client->thread, NULL, client_handler, arg);
+
+        pthread_create(thread, NULL, client_handler, arg);
     }
 }

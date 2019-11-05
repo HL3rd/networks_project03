@@ -16,7 +16,6 @@
 #include <pthread.h>
 
 struct client_t {
-    pthread_t   thread;         // client thread
     FILE        *client_file;   // connection file descriptor
     char        *username;      // client username
 
