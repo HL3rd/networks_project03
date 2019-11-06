@@ -179,17 +179,17 @@ void *client_handler(void *arg) {
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'P') {
                     if (private_message_handler(active_clients, client_file) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        fprintf(stderr, "%s:\terror:\tfailed to handle private message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'H') {
                     if (history_handler(active_clients, client_file) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        fprintf(stderr, "%s:\terror:\tfailed to operate history command\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'X') {
                     if (exit_handler(active_clients, client_file) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
+                        fprintf(stderr, "%s:\terror:\tfailed to exit properly\n", __FILE__);
                         continue;
                     }
                 } else {
