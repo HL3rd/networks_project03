@@ -96,6 +96,7 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
         printf("Please re-enter user name >> ");
         memset(target_user, 0, BUFSIZ);
         fgets(target_user, BUFSIZ, stdin);
+        rstrip(target_user);
     }
 
     char target_user_full[BUFSIZ + 1] = {0};

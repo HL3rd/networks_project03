@@ -73,6 +73,11 @@ int private_message_handler(struct client_list *active_clients, FILE *client_fil
     get_active_users(active_clients, users, BUFSIZ);
     int i = 0;
     while (users[i]) {
+        if (streq(users[i], username)) {
+            i++;
+            continue;
+        }
+
         strcat(user, users[i++]);
         fputs(user, client_file); fputs("\n", client_file); fflush(client_file);
         memset(&user[1], 0, BUFSIZ - 1);
@@ -98,7 +103,7 @@ int private_message_handler(struct client_list *active_clients, FILE *client_fil
             int copy_history_log_fd = dup(fileno(current->history_log));
             FILE *log_copy = fdopen(copy_history_log_fd, "a");
             rstrip(&target_message[1]);
-            history_logger_add_entry(log_copy, 'B', username, &target_user[1], &target_message[1]);
+            history_logger_add_entry(log_copy, 'P', username, &target_user[1], &target_message[1]);
             fclose(log_copy);
 
             int copy_client_fd = dup(fileno(current->client_file));
