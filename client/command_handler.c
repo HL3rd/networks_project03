@@ -74,27 +74,20 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
     fputs("CP\n", client_file); fflush(client_file);
 
     struct message_t *incoming_message;
+
     do {
         incoming_message = message_queue_pop(message_queue);
-    } while (!incoming_message);
+        if (!incoming_message) {
+            continue;
+        }
 
-    if (incoming_message->message[0] != 'O') {
-        fprintf(stderr, "%s:\terror:\treceived error in trying to see online clients\n", __FILE__);
-        return 1;
-    }
-
-    // Print first line of user list "Online Users:"
-    printf("%s\n", incoming_message->message);
-
-    // Print online users
-    while (1) {
-        incoming_message = message_queue_pop(message_queue);
-        if(!streq(incoming_message->message, "EOF")) {
-            printf("%s\n", incoming_message->message);
-        } else {
+        rstrip(incoming_message->message);
+        if (streq(incoming_message->message, "_EOF"))  {
             break;
         }
-    }
+
+        fputs(incoming_message->message, stdout); printf("\n"); fflush(stdout);
+    } while (1);
 
     printf("\n");
 
@@ -114,15 +107,13 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
         incoming_message = message_queue_pop(message_queue);
     } while (!incoming_message);
 
-    printf("CLIENT INCOMING: %s\n", incoming_message->message);
-
     if (!streq(incoming_message->message, "user is online")) {
         fprintf(stderr, "%s:\terror:\tuser does not exist or is not online\n", __FILE__);
         return 1;
     }
 
     // get the user's message to other user
-    printf("\n\nEnter Private Message >> ");
+    printf("\nEnter Private Message >> ");
     char message[BUFSIZ - 1] = {0};
     fgets(message, BUFSIZ, stdin);
 
@@ -131,6 +122,7 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
     bzero(full_message, BUFSIZ);
     full_message[0] = 'D';
     strcat(full_message, message);
+    printf("Sending message --> %s\n", full_message);
     fputs(full_message, client_file); fflush(client_file);
 
     // receive confirmation that message was sent
@@ -142,9 +134,6 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
         fprintf(stderr, "%s:\terror:\treceived bad confirmation status from the server\n", __FILE__);
         return 1;
     }
-
-    printf("Message Sent.\n"); fflush(stdout);
-    printf("\n");
 
     return 0;
 }
