@@ -26,7 +26,7 @@ with your username.
 Multiple clients can log on, as in the demonstration provided in the assignment.
 
 ## Server Files
-The following is a listing of server files:
+The following is a listing of server files. Please note that our __users.txt__ is contained in this __server__ directory.
 ```
 auth.c              -- implementation file for authentication into the chat service
 auth.h              -- header file for "" -- ""
