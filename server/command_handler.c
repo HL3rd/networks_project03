@@ -76,7 +76,6 @@ int private_message_handler(struct client_list *active_clients, FILE *client_fil
     char online_users[BUFSIZ] = {0};
     strcat(online_users, "COnline Users:\n");
 
-    printf("Online users v1: %s\n", online_users);
     // send first line "Online Users:"
     fputs(online_users, client_file); fflush(client_file);
 
@@ -92,6 +91,8 @@ int private_message_handler(struct client_list *active_clients, FILE *client_fil
         bzero(temp, BUFSIZ);
         current = current->next;
     }
+
+    fputs("C_EOF", client_file); fflush(client_file);
 
     pthread_mutex_unlock(&active_clients->mutex);
 

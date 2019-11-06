@@ -87,9 +87,13 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
     printf("%s\n", incoming_message->message);
 
     // Print online users
-    while (!streq(incoming_message->message, "EOF")) {
+    while (1) {
         incoming_message = message_queue_pop(message_queue);
-        printf("%s\n", incoming_message->message);
+        if(!streq(incoming_message->message, "EOF")) {
+            printf("%s\n", incoming_message->message);
+        } else {
+            break;
+        }
     }
 
     printf("\n");
