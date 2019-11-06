@@ -115,6 +115,7 @@ void *client_listener(void *arg_init) {
 
     while (1) {
         char *test = fgets(message, BUFSIZ, client_file_nonblocking);
+        
         if (!test && errno == EWOULDBLOCK) {
             usleep(250);
             continue;
