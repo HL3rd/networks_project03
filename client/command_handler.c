@@ -6,8 +6,6 @@
  *    Horacio Lopez (hlopez1)
  * * * * * * * * * * * * * * * */
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "command_handler.h"
@@ -57,19 +55,6 @@ int broadcast_message_handler(FILE *client_file, struct message_queue_t *message
 }
 
 int private_message_handler(FILE *client_file, struct message_queue_t *message_queue) {
-    /*
-        Client sends operation (P) to leave a message to a specific client.
-        Server sends the list of current online users. Note: The server should keep track of the usernames of all online users (i.e., users associated with active clients) since the program began running. You can decide how to implement this tracking function. We assume that any client can go offline by using operation (X).
-        Client receives the list of online users from the server.
-        Client prompts the user for and sends the username (of the target user) to send a message to.
-        Client sends the username to the server.
-        Client then prompts for, and sends the message to be sent.
-        Server receives the above information and checks to make sure the target user exists/online.
-        If the target user exists/online, the server forwards the message to the user, which displays the message. The server should do this by sending the message to the corresponding socket descriptor of the target user.
-        Server sends confirmation that the message was sent or that the user did not exist. Note: You can decide the content/format of the confirmation.
-        Client receives the confirmation from the server.
-        Client and server return to "prompt user for operation" and "wait for operation from client" state, respectively.
-    */
 
     // tell the server that you want to send a private message
     // receive the list of online users
@@ -141,29 +126,9 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
 }
 
 int history_handler(FILE *client_file, struct message_queue_t *message_queue) {
-    fputs("CH\n", client_file); fflush(client_file);
-    printf(" ####################### Chat History: #######################\n");
-    struct message_t *incoming_message;
-    do {
-        incoming_message = message_queue_pop(message_queue);
-        if (!incoming_message) {
-            continue;
-        }
-
-        rstrip(incoming_message->message);
-        if (streq(incoming_message->message, "_EOF"))  {
-            break;
-        }
-
-        fputs(incoming_message->message, stdout); printf("\n"); fflush(stdout);
-    } while (1);
-
-    printf("\n");
     return 0;
 }
 
 int exit_handler(FILE *client_file, struct message_queue_t *message_queue) {
-    fputs("CX\n", client_file); fflush(client_file);
-    fclose(client_file);
     return 0;
 }
