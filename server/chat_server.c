@@ -24,6 +24,7 @@
 #include "client_list.h"
 #include "auth.h"
 #include "command_handler.h"
+#include "history_logger.h"
 #include "utils.h"
 
 /* Define Macros */
@@ -173,25 +174,27 @@ void *client_handler(void *arg) {
             if (buffer[0] != 0 && buffer[0] == 'C') {           // command message
                 // handle the command appropriately
                 if (buffer[1] != 0 && buffer[1] == 'B') {
-                    if (broadcast_message_handler(active_clients, client_file) != 0) {
+                    if (broadcast_message_handler(active_clients, client_file, username) != 0) {
                         fprintf(stderr, "%s:\terror:\tfailed to broadcast message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'P') {
-                    if (private_message_handler(active_clients, client_file) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to handle private message\n", __FILE__);
+                    if (private_message_handler(active_clients, client_file, username) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to private message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'H') {
-                    if (history_handler(active_clients, client_file) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to operate history command\n", __FILE__);
+                    if (history_handler(username, client_file) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to get history\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'X') {
-                    if (exit_handler(active_clients, client_file) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to exit properly\n", __FILE__);
+                    if (exit_handler(active_clients, username) != 0) {
+                        fprintf(stderr, "%s:\terror:\tfailed to exit\n", __FILE__);
                         continue;
                     }
+
+                    return 0;
                 } else {
                     fprintf(stderr, "%s:\terror:\tunexpected command message received: %s\n", __FILE__, buffer);
                     continue;

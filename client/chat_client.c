@@ -117,6 +117,7 @@ void *client_listener(void *arg_init) {
         char *test = fgets(message, BUFSIZ, client_file_nonblocking);
         
         if (!test && errno == EWOULDBLOCK) {
+            usleep(250);
             continue;
         }
 
@@ -240,6 +241,8 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "%s:\terror:\tfailed to exit appropriately.\n", __FILE__);
                 return EXIT_FAILURE;
             }
+
+            return EXIT_SUCCESS;
         } else {
             fprintf(stderr, "%s:\terror:\tplease enter a valid command.\n", __FILE__);
             continue;
