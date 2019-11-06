@@ -72,19 +72,27 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
     // tell the server that you want to send a private message
     // receive the list of online users
     fputs("CP\n", client_file); fflush(client_file);
+
     struct message_t *incoming_message;
     do {
         incoming_message = message_queue_pop(message_queue);
     } while (!incoming_message);
-
-    printf("%s\n\n", incoming_message);
 
     if (incoming_message->message[0] != 'O') {
         fprintf(stderr, "%s:\terror:\treceived error in trying to see online clients\n", __FILE__);
         return 1;
     }
 
+    // Print first line of user list "Online Users:"
     printf("%s\n", incoming_message->message);
+
+    // Print online users
+    while (!streq(incoming_message->message, "EOF")) {
+        incoming_message = message_queue_pop(message_queue);
+        printf("%s\n", incoming_message->message);
+    }
+
+    printf("\n");
 
     // get the target username
     printf("Enter User Name >> ");

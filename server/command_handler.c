@@ -74,23 +74,24 @@ int private_message_handler(struct client_list *active_clients, FILE *client_fil
     int user_count = 1;
 
     char online_users[BUFSIZ] = {0};
-    sprintf(online_users, "%s\n", "COnline Users:");
+    strcat(online_users, "COnline Users:\n");
 
     printf("Online users v1: %s\n", online_users);
+    // send first line "Online Users:"
+    fputs(online_users, client_file); fflush(client_file);
+
+    char temp[BUFSIZ] = {0};
 
     while (current) {
         if (client_file != current->client_file) {
-            // append each name into message
-            sprintf(online_users, "%d) %s\n", user_count, current->username);
+            // send each name one by one
+            sprintf(temp, "C%d) %s\n", user_count, current->username);
+            fputs(temp, client_file); fflush(client_file);
             user_count += 1;
         }
-
+        bzero(temp, BUFSIZ);
         current = current->next;
     }
-    printf("Online users v2: %s\n", online_users);
-    // Send list of online users to the client
-    strcat(online_users, "\n");
-    fputs(online_users, client_file); fflush(client_file);
 
     pthread_mutex_unlock(&active_clients->mutex);
 
