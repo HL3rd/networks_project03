@@ -31,4 +31,6 @@ void client_list_print(struct client_list *list);
 
 void client_list_destroy(struct client_list *list);
 
+void get_active_users(struct client_list *list, char **active_users, int size);
+
 #endif

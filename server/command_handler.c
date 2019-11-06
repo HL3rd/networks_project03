@@ -65,7 +65,72 @@ int broadcast_message_handler(struct client_list *active_clients, FILE *client_f
 }
 
 int private_message_handler(struct client_list *active_clients, FILE *client_file, char *username) {
-    printf("HISTORY\n");
+    printf("PRIVATE\n");
+
+    char *users[BUFSIZ] = {0};
+    char user[BUFSIZ] = {0};
+    user[0] = 'C';
+    get_active_users(active_clients, users, BUFSIZ);
+    int i = 0;
+    while (users[i]) {
+        strcat(user, users[i++]);
+        fputs(user, client_file); fputs("\n", client_file); fflush(client_file);
+        memset(&user[1], 0, BUFSIZ - 1);
+    }
+
+    strcat(&user[1], "_EOF\n");
+    fputs(user, client_file); fflush(client_file);
+
+    // get the target user and message to send from the client
+    char target_user[BUFSIZ] = {0};
+    char target_message[BUFSIZ] = {0};
+    fgets(target_user, BUFSIZ, client_file);
+    rstrip(target_user);
+    fgets(target_message, BUFSIZ, client_file);
+
+    // make sure that the target user is still online
+    pthread_mutex_lock(&active_clients->mutex);
+    struct client_t *current = active_clients->head;
+    int found_target_client = 0;
+    while (current) {
+        if (streq(&target_user[1], current->username)) {
+            // record in log
+            int copy_history_log_fd = dup(fileno(current->history_log));
+            FILE *log_copy = fdopen(copy_history_log_fd, "a");
+            rstrip(&target_message[1]);
+            history_logger_add_entry(log_copy, 'B', username, &target_user[1], &target_message[1]);
+            fclose(log_copy);
+
+            int copy_client_fd = dup(fileno(current->client_file));
+            FILE *client_file_copy = fdopen(copy_client_fd, "w+");
+            fputs(target_message, client_file_copy); fflush(client_file_copy);
+
+            found_target_client = 1;
+        }
+
+        if (client_file == current->client_file) {
+            // record in log
+            int copy_history_log_fd = dup(fileno(current->history_log));
+            FILE *log_copy = fdopen(copy_history_log_fd, "a");
+            rstrip(&target_message[1]);
+            history_logger_add_entry(log_copy, 'B', username, &target_user[1], &target_message[1]);
+            fclose(log_copy);
+        }
+
+        current = current->next;
+    }
+
+    pthread_mutex_unlock(&active_clients->mutex);
+
+    if (found_target_client == 0) {
+        // user is no longer online
+        fputs("Cinvalid user\n", client_file); fflush(client_file);
+        return 1;
+    }
+
+    // send the message to the client
+    fputs("Cmessage sent\n", client_file); fflush(client_file);
+
     return 0;
 }
 

@@ -126,3 +126,19 @@ void client_list_destroy(struct client_list *list) {
     pthread_mutex_destroy(&list->mutex);
     free(list);
 }
+
+void get_active_users(struct client_list *list, char **active_users, int size) {
+    if (list->size == 0) {
+        return;
+    }
+
+    int i = 0;
+    pthread_mutex_lock(&list->mutex);
+    struct client_t *current = list->head;
+    while (current && i < size) {
+        active_users[i++] = current->username;
+        current = current->next;
+    }
+
+    pthread_mutex_unlock(&list->mutex);
+}

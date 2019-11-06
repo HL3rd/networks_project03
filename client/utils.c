@@ -10,6 +10,8 @@
 
 #include "utils.h"
 
+#define streq(a, b) (strcmp(a, b) == 0)
+
 void rstrip(char *s) {
     if (!s || strlen(s) == 0) {
         return;
@@ -32,4 +34,15 @@ void rstrip_c(char *s, char c) {
         *(s + i) = 0;
         i--;
     }
+}
+
+int string_in_string_array(char *s, char **arr, int size) {
+    int i = 0;
+    while (i < size && arr[i]) {
+        if (streq(arr[i++], s)) {
+            return 0;
+        }
+    }
+
+    return 1;
 }

@@ -180,7 +180,7 @@ void *client_handler(void *arg) {
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'P') {
                     if (private_message_handler(active_clients, client_file, username) != 0) {
-                        fprintf(stderr, "%s:\terror:\tfailed to private message\n", __FILE__);
+                        fprintf(stderr, "%s:\terror:\tfailed to send private message\n", __FILE__);
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'H') {
