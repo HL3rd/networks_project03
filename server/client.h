@@ -17,6 +17,7 @@
 
 struct client_t {
     FILE        *client_file;   // connection file descriptor
+    FILE        *history_log;   // history log
     char        *username;      // client username
 
     struct client_t *prev;      // pointer to prev client in linked list

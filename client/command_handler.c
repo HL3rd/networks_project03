@@ -6,6 +6,8 @@
  *    Horacio Lopez (hlopez1)
  * * * * * * * * * * * * * * * */
 
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "command_handler.h"
@@ -59,6 +61,23 @@ int private_message_handler(FILE *client_file, struct message_queue_t *message_q
 }
 
 int history_handler(FILE *client_file, struct message_queue_t *message_queue) {
+    fputs("CH\n", client_file); fflush(client_file);
+    printf(" ####################### Chat History: #######################\n");
+    struct message_t *incoming_message;
+    do {
+        incoming_message = message_queue_pop(message_queue);
+        if (!incoming_message) {
+            continue;
+        }
+
+        rstrip(incoming_message->message);
+        if (streq(incoming_message->message, "_EOF"))  {
+            break;
+        }
+
+        fputs(incoming_message->message, stdout); printf("\n\n"); fflush(stdout);
+    } while (1);
+
     return 0;
 }
 

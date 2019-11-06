@@ -116,6 +116,7 @@ void *client_listener(void *arg_init) {
     while (1) {
         char *test = fgets(message, BUFSIZ, client_file_nonblocking);
         if (!test && errno == EWOULDBLOCK) {
+            usleep(250);
             continue;
         }
 
@@ -123,7 +124,7 @@ void *client_listener(void *arg_init) {
             fputs("\n\n ####################### New Message: ", stdout);
             rstrip(&message[1]);
             fputs(&message[1], stdout);
-            fputs("#######################\n\n>> ", stdout); fflush(stdout);
+            fputs(" #######################\n\n>> ", stdout); fflush(stdout);
         } else {
             rstrip(&message[1]);
             struct message_t *m = message_init(&message[1]);

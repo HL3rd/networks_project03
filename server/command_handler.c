@@ -7,14 +7,16 @@
  * * * * * * * * * * * * * * * */
 
 #include "command_handler.h"
+#include "history_logger.h"
 #include "utils.h"
 
 #include <stdio.h>
 #include <unistd.h>
+#include <errno.h>
 
 #define streq(a, b) (strcmp(a, b) == 0)
 
-int broadcast_message_handler(struct client_list *active_clients, FILE *client_file) {
+int broadcast_message_handler(struct client_list *active_clients, FILE *client_file, char *username) {
     printf("BROADCAST\n");
 
     // send a "ready to receive message" response to the client
@@ -38,6 +40,14 @@ int broadcast_message_handler(struct client_list *active_clients, FILE *client_f
     pthread_mutex_lock(&active_clients->mutex);
     struct client_t *current = active_clients->head;
     while (current) {
+        // record in log
+        int copy_history_log_fd = dup(fileno(current->history_log));
+        FILE *log_copy = fdopen(copy_history_log_fd, "a");
+        rstrip(&message[1]);
+        history_logger_add_entry(log_copy, 'B', username, NULL, &message[1]);
+        fclose(log_copy);
+
+        // write to client stream if sender != current
         if (client_file != current->client_file) {
             int copy_client_fd = dup(fileno(current->client_file));
             FILE *client_file_copy = fdopen(copy_client_fd, "w+");
@@ -54,15 +64,41 @@ int broadcast_message_handler(struct client_list *active_clients, FILE *client_f
     return 0;
 }
 
-int private_message_handler(struct client_list *active_clients, FILE *client_file) {
-    // fputs("CP", client_file); fflush(client_file);
+int private_message_handler(struct client_list *active_clients, FILE *client_file, char *username) {
+    printf("HISTORY\n");
     return 0;
 }
 
-int history_handler(struct client_list *active_clients, FILE *client_file) {
+int history_handler(char *username, FILE *client_file) {
+    printf("HISTORY\n");
+
+    // open up the history file
+    char filename[BUFSIZ] = {0};
+    strcat(filename, username);
+    strcat(filename, ".txt");
+    FILE *history = fopen(filename, "r");
+    if (!history) {
+        fprintf(stderr, "%s:\terror:\tfailed to open history file %s: %s", __FILE__, filename, strerror(errno));
+        return 1;
+    }
+
+    // send the contents to the client
+    char buffer[BUFSIZ] = {0};
+    buffer[0] = 'C';
+    while (fgets(&buffer[1], BUFSIZ - 1, history)) {
+        fputs(buffer, client_file); fflush(client_file);
+    }
+
+    memset(buffer, 0, BUFSIZ);
+    strcat(buffer, "C_EOF\n");
+    fputs(buffer, client_file); fflush(client_file);
+
+    // cleanup
+    fclose(history);
     return 0;
 }
 
 int exit_handler(struct client_list *active_clients, FILE *client_file) {
+    printf("EXIT\n");
     return 0;
 }
