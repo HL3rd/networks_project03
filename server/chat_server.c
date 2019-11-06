@@ -189,10 +189,12 @@ void *client_handler(void *arg) {
                         continue;
                     }
                 } else if (buffer[1] != 0 && buffer[1] == 'X') {
-                    if (exit_handler(active_clients, client_file) != 0) {
+                    if (exit_handler(active_clients, username) != 0) {
                         fprintf(stderr, "%s:\terror:\tfailed to exit\n", __FILE__);
                         continue;
                     }
+
+                    return 0;
                 } else {
                     fprintf(stderr, "%s:\terror:\tunexpected command message received: %s\n", __FILE__, buffer);
                     continue;

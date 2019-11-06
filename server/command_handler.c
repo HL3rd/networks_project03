@@ -98,7 +98,8 @@ int history_handler(char *username, FILE *client_file) {
     return 0;
 }
 
-int exit_handler(struct client_list *active_clients, FILE *client_file) {
+int exit_handler(struct client_list *active_clients, char *username) {
     printf("EXIT\n");
+    client_list_remove(active_clients, username);
     return 0;
 }

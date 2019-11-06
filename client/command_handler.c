@@ -75,12 +75,15 @@ int history_handler(FILE *client_file, struct message_queue_t *message_queue) {
             break;
         }
 
-        fputs(incoming_message->message, stdout); printf("\n\n"); fflush(stdout);
+        fputs(incoming_message->message, stdout); printf("\n"); fflush(stdout);
     } while (1);
 
+    printf("\n");
     return 0;
 }
 
 int exit_handler(FILE *client_file, struct message_queue_t *message_queue) {
+    fputs("CX\n", client_file); fflush(client_file);
+    fclose(client_file);
     return 0;
 }
